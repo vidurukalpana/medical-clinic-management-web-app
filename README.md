@@ -25,6 +25,71 @@ The first version is designed for local use.
 
 PostgreSQL and cloud hosting can be introduced later if the clinic needs to support more users or remote access.
 
+## Run the application locally
+
+### 1. Install Python
+
+Install Python 3.14 and confirm that it is available:
+
+```bash
+python3 --version
+```
+
+### 2. Create a virtual environment
+
+Open Terminal in the project folder, then create and activate a virtual environment:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+When the environment is active, `(.venv)` appears at the beginning of the Terminal prompt.
+
+### 3. Install the dependencies
+
+```bash
+python -m pip install -r requirements.txt
+```
+
+### 4. Create the environment file
+
+Copy the example configuration:
+
+```bash
+cp .env.example .env
+```
+
+The supplied settings are ready for local development. The `.env` file is ignored by Git because it may contain secrets.
+
+### 5. Initialize the database and start the application
+
+```bash
+python main.py
+```
+
+No separate database command is needed. When the application starts for the first time, it creates the SQLite database at `data/medical_clinic.db` and creates any missing tables.
+
+Open these addresses in a web browser:
+
+- Application: http://127.0.0.1:8000
+- Interactive API documentation: http://127.0.0.1:8000/docs
+- Health check: http://127.0.0.1:8000/api/health
+
+Press `Control+C` in Terminal to stop the application.
+
+### Run with PyCharm
+
+Select `.venv/bin/python` as the project interpreter. Create a Python Run Configuration with `main.py` as the script and the project folder as the working directory, then click **Run**. Starting `main.py` also initializes the database automatically.
+
+### Run the tests
+
+With the virtual environment active, run:
+
+```bash
+pytest
+```
+
 ## Entity relationship diagram
 
 ```mermaid
