@@ -18,9 +18,10 @@ The first version is designed for local use.
 
 ## Technology
 
-- Python and Django
+- Python and FastAPI
+- SQLAlchemy for database access
 - SQLite for the initial local version
-- Django templates, HTML, Bootstrap and minimal JavaScript
+- Jinja templates, HTML, Bootstrap and minimal JavaScript
 
 PostgreSQL and cloud hosting can be introduced later if the clinic needs to support more users or remote access.
 
