@@ -2,43 +2,50 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from sqlalchemy import text
+from sqlalchemy import Engine
 
-import app.models
-from app.core.config import get_settings
-from app.db.base import Base
+from app.core.config import Settings, get_settings
+from app.db.initialize import initialize_database
 from app.db.session import engine
-from app.routers import health
+from app.routers import admin, auth, doctors, health
 
 settings = get_settings()
 
 
-@asynccontextmanager
-async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-    """Create missing tables and verify the database connection at startup."""
-    Base.metadata.create_all(bind=engine)
-    with engine.connect() as connection:
-        connection.execute(text("SELECT 1"))
-    yield
+def create_app(
+    database_engine: Engine = engine,
+    app_settings: Settings = settings,
+) -> FastAPI:
+    @asynccontextmanager
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        """Initialize and verify the database at application startup."""
+        initialize_database(database_engine, app_settings)
+        yield
+
+    application = FastAPI(
+        title=app_settings.app_name,
+        version=app_settings.app_version,
+        debug=app_settings.debug,
+        lifespan=lifespan,
+    )
+
+    application.include_router(health.router, prefix="/api")
+    application.include_router(auth.router, prefix="/api")
+    application.include_router(admin.router, prefix="/api")
+    application.include_router(doctors.router, prefix="/api")
+
+    @application.get("/", include_in_schema=False)
+    def root() -> dict[str, str]:
+        return {
+            "name": app_settings.app_name,
+            "status": "running",
+            "documentation": "/docs",
+        }
+
+    return application
 
 
-app = FastAPI(
-    title=settings.app_name,
-    version=settings.app_version,
-    debug=settings.debug,
-    lifespan=lifespan,
-)
-
-app.include_router(health.router, prefix="/api")
-
-
-@app.get("/", include_in_schema=False)
-def root() -> dict[str, str]:
-    return {
-        "name": settings.app_name,
-        "status": "running",
-        "documentation": "/docs",
-    }
+app = create_app()
 
 
 if __name__ == "__main__":
@@ -50,4 +57,3 @@ if __name__ == "__main__":
         port=settings.port,
         reload=settings.debug,
     )
-
