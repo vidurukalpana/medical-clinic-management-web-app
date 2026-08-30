@@ -20,14 +20,14 @@ The first version is designed for local use.
 
 - Python and FastAPI
 - SQLAlchemy for database access
-- SQLite for the initial local version
+- PostgreSQL with the Psycopg driver
 - Jinja templates, HTML, Bootstrap and minimal JavaScript
 
-PostgreSQL and cloud hosting can be introduced later if the clinic needs to support more users or remote access.
+A cloud deployment can be introduced later if the clinic needs to support remote access.
 
 ## Run the application locally
 
-### 1. Install Python
+### 1. Install Python and PostgreSQL
 
 Install Python 3.14 and confirm that it is available:
 
@@ -35,7 +35,21 @@ Install Python 3.14 and confirm that it is available:
 python3 --version
 ```
 
-### 2. Create a virtual environment
+Install PostgreSQL and pgAdmin, then start the local PostgreSQL server.
+
+### 2. Create the PostgreSQL databases
+
+The application can create tables only after its PostgreSQL database exists. In pgAdmin, connect to the default `postgres` database and open **Query Tool**. Run each statement separately, replacing the example password with your own password:
+
+```sql
+CREATE ROLE clinic_app WITH LOGIN PASSWORD 'change-this-password';
+```
+
+```sql
+CREATE DATABASE medical_clinic OWNER clinic_app;
+```
+
+### 3. Create a virtual environment
 
 Open Terminal in the project folder, then create and activate a virtual environment:
 
@@ -46,13 +60,13 @@ source .venv/bin/activate
 
 When the environment is active, `(.venv)` appears at the beginning of the Terminal prompt.
 
-### 3. Install the dependencies
+### 4. Install the dependencies
 
 ```bash
 python -m pip install -r requirements.txt
 ```
 
-### 4. Create the environment file
+### 5. Create the environment file
 
 Copy the example configuration:
 
@@ -60,15 +74,15 @@ Copy the example configuration:
 cp .env.example .env
 ```
 
-The supplied settings are ready for local development. The `.env` file is ignored by Git because it may contain secrets.
+Open `.env`, replace `change-this-password` in the PostgreSQL URL with the password used when creating `clinic_app`, and choose strong initial passwords for the administrator and both doctors. The `.env` file is ignored by Git because it contains database credentials and other secrets.
 
-### 5. Initialize the database and start the application
+### 6. Create the tables and start the application
 
 ```bash
 python main.py
 ```
 
-No separate database command is needed. When the application starts for the first time, it creates the SQLite database at `data/medical_clinic.db` and creates any missing tables.
+At startup, SQLAlchemy connects to `medical_clinic` and creates any missing tables, constraints and relationships from the application models. It also adds the initial administrator and two doctor accounts. The application intentionally accepts only a `postgresql+psycopg://` database URL.
 
 Open these addresses in a web browser:
 
@@ -84,17 +98,53 @@ Select `.venv/bin/python` as the project interpreter. Create a Python Run Config
 
 ### Run the tests
 
-With the virtual environment active, run:
+Confirm that PostgreSQL is running, then run:
 
 ```bash
 pytest
 ```
+
+Tests use `CLINIC_DATABASE_URL` and create a uniquely named temporary PostgreSQL schema. Only that temporary schema is removed after each test; the application's normal tables and clinic data are not changed.
+
+## Authentication and doctor accounts
+
+The local environment uses these initial usernames:
+
+- Administrator: `admin`
+- Doctor One: `doctor1`
+- Doctor Two: `doctor2`
+
+Before creating a new database, set `CLINIC_ADMIN_PASSWORD`, `CLINIC_DOCTOR_ONE_PASSWORD` and `CLINIC_DOCTOR_TWO_PASSWORD` in `.env`. There are no initial password defaults in the Python code. These values create missing accounts only and never overwrite passwords for existing accounts.
+
+Log in with `POST /api/auth/login`, then copy the returned access token. In the interactive API documentation, click **Authorize** and enter the token to call protected endpoints. `POST /api/auth/logout` immediately revokes the current token.
+
+Logged-in users can change their password with `PUT /api/auth/password`. They must provide their current password and a new password of at least 12 characters. Administrators can reset another account with `PUT /api/admin/users/{user_id}/password`. A password change or reset revokes all active sessions for that account and requires a new login.
+
+### Permissions
+
+- Administrators can view both doctor profiles, update either profile and activate or deactivate a doctor.
+- Doctors can view doctor profiles and update their own display name or phone number.
+- Doctors cannot update another doctor's profile or change registration and active-status fields.
+
+### Authentication and doctor APIs
+
+- `POST /api/auth/login` — log in and create a session.
+- `POST /api/auth/logout` — log out and revoke the current session.
+- `GET /api/auth/me` — return the logged-in account and doctor profile.
+- `PUT /api/auth/password` — change the logged-in user's password.
+- `PUT /api/admin/users/{user_id}/password` — let an administrator reset a user's password.
+- `GET /api/doctors` — list doctor profiles.
+- `GET /api/doctors/me` — return the logged-in doctor's profile.
+- `PATCH /api/doctors/me` — let a doctor update their own profile.
+- `GET /api/doctors/{doctor_id}` — return one doctor profile.
+- `PATCH /api/doctors/{doctor_id}` — let an administrator update a doctor profile.
 
 ## Entity relationship diagram
 
 ```mermaid
 erDiagram
     USER ||--o| DOCTOR : has_profile
+    USER ||--o{ AUTH_SESSION : opens
     DOCTOR ||--o{ AVAILABILITY : defines
     DOCTOR ||--o{ DOCTOR_UNAVAILABILITY : blocks
     DOCTOR ||--o{ APPOINTMENT : receives
@@ -111,6 +161,14 @@ erDiagram
         string password_hash
         string role
         boolean is_active
+    }
+
+    AUTH_SESSION {
+        int id PK
+        int user_id FK
+        string token_hash UK
+        datetime expires_at
+        datetime revoked_at
     }
 
     DOCTOR {
@@ -205,6 +263,7 @@ erDiagram
 ### Entities
 
 - **User:** Stores login and access information. A user may have one doctor profile.
+- **Authentication session:** Stores a hashed login token, its expiry time and when it was revoked. A user can have multiple sessions.
 - **Doctor:** Stores the professional details of each doctor and connects them to their login account.
 - **Patient:** Stores patient identity and contact information. One patient can have many appointments and visits.
 - **Availability:** Stores the normal weekdays and hours during which a doctor accepts appointments.
@@ -217,6 +276,7 @@ erDiagram
 ### Main relationships
 
 - One doctor can define many availability and unavailability periods.
+- One user can open many authentication sessions. Logging out revokes the current session.
 - One doctor can receive many appointments, but each appointment belongs to one doctor.
 - One patient can make many appointments, but each appointment belongs to one patient.
 - A scheduled appointment may create one visit when the patient checks in.

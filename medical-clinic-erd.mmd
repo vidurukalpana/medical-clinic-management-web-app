@@ -1,5 +1,6 @@
 erDiagram
     USER ||--o| DOCTOR : has_profile
+    USER ||--o{ AUTH_SESSION : opens
     DOCTOR ||--o{ AVAILABILITY : defines
     DOCTOR ||--o{ DOCTOR_UNAVAILABILITY : blocks
     DOCTOR ||--o{ APPOINTMENT : receives
@@ -16,6 +17,14 @@ erDiagram
         string password_hash
         string role
         boolean is_active
+    }
+
+    AUTH_SESSION {
+        int id PK
+        int user_id FK
+        string token_hash UK
+        datetime expires_at
+        datetime revoked_at
     }
 
     DOCTOR {
