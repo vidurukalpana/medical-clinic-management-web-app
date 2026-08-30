@@ -1,0 +1,97 @@
+erDiagram
+    USER ||--o| DOCTOR : has_profile
+    DOCTOR ||--o{ AVAILABILITY : defines
+    DOCTOR ||--o{ DOCTOR_UNAVAILABILITY : blocks
+    DOCTOR ||--o{ APPOINTMENT : receives
+    PATIENT ||--o{ APPOINTMENT : books
+    APPOINTMENT o|--o| VISIT : may_create
+    DOCTOR ||--o{ VISIT : conducts
+    PATIENT ||--o{ VISIT : attends
+    VISIT ||--o| PRESCRIPTION : has
+    PRESCRIPTION ||--|{ PRESCRIPTION_ITEM : contains
+
+    USER {
+        int id PK
+        string username UK
+        string password_hash
+        string role
+        boolean is_active
+    }
+
+    DOCTOR {
+        int id PK
+        int user_id FK, UK
+        string display_name
+        string registration_number UK
+        string phone
+        boolean is_active
+    }
+
+    PATIENT {
+        int id PK
+        string medical_record_number UK
+        string full_name
+        date date_of_birth
+        string sex
+        string phone
+        string address
+        string emergency_contact
+    }
+
+    AVAILABILITY {
+        int id PK
+        int doctor_id FK
+        int weekday
+        time start_time
+        time end_time
+        int slot_duration_minutes
+        boolean is_active
+    }
+
+    DOCTOR_UNAVAILABILITY {
+        int id PK
+        int doctor_id FK
+        datetime start_at
+        datetime end_at
+        string reason
+    }
+
+    APPOINTMENT {
+        int id PK
+        int doctor_id FK
+        int patient_id FK
+        datetime start_at
+        datetime end_at
+        string reason
+        string status
+    }
+
+    VISIT {
+        int id PK
+        int appointment_id FK
+        int doctor_id FK
+        int patient_id FK
+        int queue_number
+        string status
+        text presenting_complaint
+        text diagnosis
+        text clinical_notes
+        text treatment_plan
+    }
+
+    PRESCRIPTION {
+        int id PK
+        int visit_id FK, UK
+        datetime issued_at
+        text general_instructions
+    }
+
+    PRESCRIPTION_ITEM {
+        int id PK
+        int prescription_id FK
+        string medicine_name
+        string dose
+        string frequency
+        string duration
+        string instructions
+    }
