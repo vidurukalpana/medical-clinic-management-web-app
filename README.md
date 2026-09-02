@@ -21,7 +21,6 @@ The first version is designed for local use.
 - Python and FastAPI
 - SQLAlchemy for database access
 - PostgreSQL with the Psycopg driver
-- Jinja templates, HTML, Bootstrap and minimal JavaScript
 
 A cloud deployment can be introduced later if the clinic needs to support remote access.
 
@@ -139,6 +138,21 @@ Logged-in users can change their password with `PUT /api/auth/password`. They mu
 - `GET /api/doctors/{doctor_id}` — return one doctor profile.
 - `PATCH /api/doctors/{doctor_id}` — let an administrator update a doctor profile.
 
+## Patient management
+
+After logging in, administrators and doctors can:
+
+- Register a patient and receive an automatically generated medical record number.
+- Search patients by medical record number, name or phone number.
+- View and edit patient details.
+
+Patient management is currently available through these protected REST endpoints:
+
+- `POST /api/patients` — register a patient.
+- `GET /api/patients` — list patients or search with the `query` parameter.
+- `GET /api/patients/{patient_id}` — return one patient's details.
+- `PATCH /api/patients/{patient_id}` — update a patient's details.
+
 ## Entity relationship diagram
 
 ```mermaid
@@ -185,7 +199,7 @@ erDiagram
         string medical_record_number UK
         string full_name
         date date_of_birth
-        string sex
+        string gender
         string phone
         string address
         string emergency_contact
