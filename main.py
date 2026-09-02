@@ -7,7 +7,7 @@ from sqlalchemy import Engine
 from app.core.config import Settings, get_settings
 from app.db.initialize import initialize_database
 from app.db.session import engine
-from app.routers import admin, auth, doctors, health
+from app.routers import admin, auth, doctors, health, patients
 
 settings = get_settings()
 
@@ -28,11 +28,11 @@ def create_app(
         debug=app_settings.debug,
         lifespan=lifespan,
     )
-
     application.include_router(health.router, prefix="/api")
     application.include_router(auth.router, prefix="/api")
     application.include_router(admin.router, prefix="/api")
     application.include_router(doctors.router, prefix="/api")
+    application.include_router(patients.router, prefix="/api")
 
     @application.get("/", include_in_schema=False)
     def root() -> dict[str, str]:

@@ -1,4 +1,4 @@
-"""Pydantic request and response schemas will be added here."""
+"""Pydantic request and response schemas."""
 from app.schemas.auth import (
     AuthenticatedUserRead,
     LoginRequest,
@@ -7,6 +7,12 @@ from app.schemas.auth import (
     PasswordResetRequest,
 )
 from app.schemas.doctor import DoctorAdminUpdate, DoctorRead, DoctorSelfUpdate
+from app.schemas.patient import (
+    PatientCreate,
+    PatientRead,
+    PatientSearchResponse,
+    PatientUpdate,
+)
 from app.schemas.user import UserRead
 
 __all__ = [
@@ -18,5 +24,9 @@ __all__ = [
     "LoginResponse",
     "PasswordChangeRequest",
     "PasswordResetRequest",
+    "PatientCreate",
+    "PatientRead",
+    "PatientSearchResponse",
+    "PatientUpdate",
     "UserRead",
 ]
