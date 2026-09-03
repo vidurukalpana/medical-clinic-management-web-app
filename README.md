@@ -122,7 +122,8 @@ Logged-in users can change their password with `PUT /api/auth/password`. They mu
 ### Permissions
 
 - Administrators can view both doctor profiles, update either profile and activate or deactivate a doctor.
-- Doctors can view doctor profiles and update their own display name or phone number.
+- Administrators can manage working hours and unavailable dates for either doctor.
+- Doctors can view doctor profiles and schedules, update their own profile and manage their own schedule.
 - Doctors cannot update another doctor's profile or change registration and active-status fields.
 
 ### Authentication and doctor APIs
@@ -137,6 +138,19 @@ Logged-in users can change their password with `PUT /api/auth/password`. They mu
 - `PATCH /api/doctors/me` — let a doctor update their own profile.
 - `GET /api/doctors/{doctor_id}` — return one doctor profile.
 - `PATCH /api/doctors/{doctor_id}` — let an administrator update a doctor profile.
+
+## Doctor scheduling
+
+Availability records define a doctor's weekday, working period and appointment-slot duration. Weekdays use `0` for Monday through `4` for Friday. Unavailability records use `start_at` and `end_at`, so they can block part of a day, a full day or several days.
+
+- `GET /api/doctors/{doctor_id}/availability` — list weekly availability.
+- `POST /api/doctors/{doctor_id}/availability` — add an availability period.
+- `PUT /api/doctors/{doctor_id}/availability/{availability_id}` — replace an availability period.
+- `DELETE /api/doctors/{doctor_id}/availability/{availability_id}` — remove an availability period.
+- `GET /api/doctors/{doctor_id}/unavailability` — list unavailable periods.
+- `POST /api/doctors/{doctor_id}/unavailability` — add an unavailable period.
+- `PUT /api/doctors/{doctor_id}/unavailability/{unavailability_id}` — replace an unavailable period.
+- `DELETE /api/doctors/{doctor_id}/unavailability/{unavailability_id}` — remove an unavailable period.
 
 ## Patient management
 

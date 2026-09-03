@@ -1,6 +1,7 @@
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
+from app.errors import NotFoundError
 from app.models.patient import Patient, patient_record_number_sequence
 from app.schemas.patient import PatientCreate, PatientUpdate
 
@@ -22,8 +23,11 @@ def create_patient(db: Session, patient_data: PatientCreate) -> Patient:
     return patient
 
 
-def get_patient(db: Session, patient_id: int) -> Patient | None:
-    return db.get(Patient, patient_id)
+def get_patient(db: Session, patient_id: int) -> Patient:
+    patient = db.get(Patient, patient_id)
+    if patient is None:
+        raise NotFoundError("Patient")
+    return patient
 
 
 def search_patients(

@@ -1,9 +1,9 @@
-from fastapi import APIRouter, HTTPException, Response, status
+from fastapi import APIRouter, Response, status
 
 from app.dependencies import AdministratorUser, DatabaseSession
-from app.models import User
 from app.schemas.auth import PasswordResetRequest
 from app.services.auth import set_user_password
+from app.services.users import get_user
 
 router = APIRouter(prefix="/admin", tags=["administration"])
 
@@ -19,12 +19,6 @@ def reset_user_password(
     _: AdministratorUser,
     db: DatabaseSession,
 ) -> Response:
-    user = db.get(User, user_id)
-    if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found.",
-        )
-
+    user = get_user(db, user_id)
     set_user_password(db, user, request.new_password)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
