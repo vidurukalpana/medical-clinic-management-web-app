@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, Response, status
 
 from app.core.config import Settings, get_settings
 from app.dependencies import CurrentAuthSession, CurrentUser, DatabaseSession
@@ -11,7 +11,6 @@ from app.schemas.auth import (
     PasswordChangeRequest,
 )
 from app.services.auth import (
-    InvalidCurrentPasswordError,
     authenticate_user,
     change_user_password,
     create_auth_session,
@@ -34,13 +33,6 @@ def login(
     settings: AppSettings,
 ) -> LoginResponse:
     user = authenticate_user(db, credentials.username, credentials.password)
-    if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password.",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
     access_token, _ = create_auth_session(
         db,
         user,
@@ -86,17 +78,10 @@ def change_password(
     current_user: CurrentUser,
     db: DatabaseSession,
 ) -> Response:
-    try:
-        change_user_password(
-            db,
-            current_user,
-            request.current_password,
-            request.new_password,
-        )
-    except InvalidCurrentPasswordError as error:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Current password is incorrect.",
-        ) from error
-
+    change_user_password(
+        db,
+        current_user,
+        request.current_password,
+        request.new_password,
+    )
     return Response(status_code=status.HTTP_204_NO_CONTENT)

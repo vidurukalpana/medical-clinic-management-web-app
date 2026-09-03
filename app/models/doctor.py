@@ -9,6 +9,10 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 
 if TYPE_CHECKING:
+    from app.models.doctor_scheduling import (
+        Availability,
+        DoctorUnavailability,
+    )
     from app.models.user import User
 
 
@@ -30,3 +34,13 @@ class Doctor(Base):
     )
 
     user: Mapped[User] = relationship(back_populates="doctor")
+    availability: Mapped[list[Availability]] = relationship(
+        back_populates="doctor",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    unavailability: Mapped[list[DoctorUnavailability]] = relationship(
+        back_populates="doctor",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )

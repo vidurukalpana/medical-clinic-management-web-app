@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Query, status
 
 from app.dependencies import CurrentUser, DatabaseSession
 from app.schemas.patient import (
@@ -65,11 +65,6 @@ def read_patient(
     db: DatabaseSession,
 ) -> PatientRead:
     patient = get_patient(db, patient_id)
-    if patient is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Patient not found.",
-        )
     return PatientRead.model_validate(patient)
 
 
@@ -85,9 +80,4 @@ def edit_patient(
     db: DatabaseSession,
 ) -> PatientRead:
     patient = get_patient(db, patient_id)
-    if patient is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Patient not found.",
-        )
     return PatientRead.model_validate(update_patient(db, patient, patient_data))

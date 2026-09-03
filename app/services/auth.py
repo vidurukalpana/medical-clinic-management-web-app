@@ -1,8 +1,13 @@
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import delete, select, update
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, joinedload, selectinload
 
+from app.errors import (
+    AuthenticationRequiredError,
+    InvalidCredentialsError,
+    InvalidCurrentPasswordError,
+)
 from app.models import AuthSession, User, UserRole
 from app.services.security import (
     DUMMY_PASSWORD_HASH,
@@ -13,15 +18,11 @@ from app.services.security import (
 )
 
 
-class InvalidCurrentPasswordError(Exception):
-    pass
-
-
 def normalize_username(username: str) -> str:
     return username.strip().lower()
 
 
-def authenticate_user(db: Session, username: str, password: str) -> User | None:
+def authenticate_user(db: Session, username: str, password: str) -> User:
     user = db.scalar(
         select(User)
         .options(selectinload(User.doctor))
@@ -30,17 +31,39 @@ def authenticate_user(db: Session, username: str, password: str) -> User | None:
 
     if user is None:
         verify_password(password, DUMMY_PASSWORD_HASH)
-        return None
+        raise InvalidCredentialsError()
 
     if not verify_password(password, user.password_hash) or not user.is_active:
-        return None
+        raise InvalidCredentialsError()
 
     if user.role == UserRole.DOCTOR and (
         user.doctor is None or not user.doctor.is_active
     ):
-        return None
+        raise InvalidCredentialsError()
 
     return user
+
+
+def get_active_auth_session(db: Session, token: str) -> AuthSession:
+    auth_session = db.scalar(
+        select(AuthSession)
+        .options(joinedload(AuthSession.user).joinedload(User.doctor))
+        .where(
+            AuthSession.token_hash == hash_session_token(token),
+            AuthSession.revoked_at.is_(None),
+            AuthSession.expires_at > datetime.now(timezone.utc),
+        )
+    )
+    if auth_session is None or not auth_session.user.is_active:
+        raise AuthenticationRequiredError()
+
+    user = auth_session.user
+    if user.role == UserRole.DOCTOR and (
+        user.doctor is None or not user.doctor.is_active
+    ):
+        raise AuthenticationRequiredError()
+
+    return auth_session
 
 
 def create_auth_session(
@@ -78,7 +101,7 @@ def change_user_password(
     new_password: str,
 ) -> None:
     if not verify_password(current_password, user.password_hash):
-        raise InvalidCurrentPasswordError
+        raise InvalidCurrentPasswordError()
     set_user_password(db, user, new_password)
 
 

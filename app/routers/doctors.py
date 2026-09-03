@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter
 
 from app.dependencies import (
     AdministratorUser,
@@ -6,14 +6,8 @@ from app.dependencies import (
     CurrentUser,
     DatabaseSession,
 )
-from app.models import UserRole
 from app.schemas.doctor import DoctorAdminUpdate, DoctorRead, DoctorSelfUpdate
-from app.services.doctors import (
-    DuplicateRegistrationNumberError,
-    get_doctor,
-    list_doctors,
-    update_doctor,
-)
+from app.services.doctors import get_doctor, list_doctors, update_doctor
 
 router = APIRouter(prefix="/doctors", tags=["doctors"])
 
@@ -27,10 +21,7 @@ def read_doctors(
     current_user: CurrentUser,
     db: DatabaseSession,
 ) -> list[DoctorRead]:
-    doctors = list_doctors(
-        db,
-        include_inactive=current_user.role == UserRole.ADMINISTRATOR,
-    )
+    doctors = list_doctors(db, current_user)
     return [DoctorRead.model_validate(doctor) for doctor in doctors]
 
 
@@ -68,11 +59,6 @@ def read_doctor(
     db: DatabaseSession,
 ) -> DoctorRead:
     doctor = get_doctor(db, doctor_id)
-    if doctor is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Doctor not found.",
-        )
     return DoctorRead.model_validate(doctor)
 
 
@@ -89,18 +75,5 @@ def update_doctor_as_administrator(
     db: DatabaseSession,
 ) -> DoctorRead:
     doctor = get_doctor(db, doctor_id)
-    if doctor is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Doctor not found.",
-        )
-
-    try:
-        doctor = update_doctor(db, doctor, update)
-    except DuplicateRegistrationNumberError as error:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Registration number already exists.",
-        ) from error
-
+    doctor = update_doctor(db, doctor, update)
     return DoctorRead.model_validate(doctor)

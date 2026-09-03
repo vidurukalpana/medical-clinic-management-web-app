@@ -1,15 +1,12 @@
-from typing import Annotated
+from fastapi import APIRouter
 
-from fastapi import APIRouter, Depends
-from sqlalchemy import text
-from sqlalchemy.orm import Session
-
-from app.db.session import get_db
+from app.dependencies import DatabaseSession
+from app.services.health import verify_database_connection
 
 router = APIRouter(tags=["system"])
 
 
 @router.get("/health", summary="Check application and database health")
-def health_check(db: Annotated[Session, Depends(get_db)]) -> dict[str, str]:
-    db.execute(text("SELECT 1"))
+def health_check(db: DatabaseSession) -> dict[str, str]:
+    verify_database_connection(db)
     return {"status": "ok", "database": "connected"}
