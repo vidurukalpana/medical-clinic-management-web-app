@@ -41,7 +41,7 @@ class Availability(Base):
     weekday: Mapped[int] = mapped_column(Integer)
     start_time: Mapped[time] = mapped_column(Time)
     end_time: Mapped[time] = mapped_column(Time)
-    slot_duration_minutes: Mapped[int] = mapped_column(Integer)
+    slot_duration_minutes: Mapped[int] = mapped_column(Integer, default=10, server_default="10")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     doctor: Mapped[Doctor] = relationship(back_populates="availability")

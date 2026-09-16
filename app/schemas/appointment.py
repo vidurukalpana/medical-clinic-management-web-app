@@ -36,3 +36,8 @@ class AppointmentRead(AvailableSlot):
     patient_id: int
     reason: str | None
     status: Literal["scheduled", "completed", "cancelled", "no_show"]
+
+
+class BookingStatus(BaseModel):
+    remaining_slots: int
+    is_fully_booked: bool

@@ -272,3 +272,18 @@ def test_scheduling_resources_return_not_found(
     assert missing_doctor.status_code == 404
     assert missing_availability.status_code == 404
     assert missing_unavailability.status_code == 404
+
+
+def test_default_ten_minute_slots(client, test_settings):
+    headers, _ = login(client, test_settings.admin_username,
+                       configured_password(test_settings.admin_password))
+    payload = availability_payload(end_time="11:00:00")
+    del payload["slot_duration_minutes"]
+    response = client.post("/api/doctors/1/availability", headers=headers, json=payload)
+    assert response.status_code == 201
+    assert response.json()["slot_duration_minutes"] == 10
+    from datetime import date, timedelta
+    day = date.today() + timedelta(days=7)
+    day += timedelta(days=-day.weekday())
+    slots = client.get(f"/api/doctors/1/available-slots?day={day}", headers=headers)
+    assert len(slots.json()) == 12

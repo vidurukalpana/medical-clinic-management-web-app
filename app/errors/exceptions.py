@@ -64,3 +64,9 @@ class UnavailabilityOverlapError(ConflictError):
     """Raised when doctor unavailability periods overlap."""
 
     default_detail = "Unavailable period overlaps an existing period."
+
+
+class DoctorFullyBookedError(ConflictError):
+    """Raised when no consultation slots remain for a doctor."""
+
+    default_detail = "Doctor is fully booked. No consultation slots remain today."

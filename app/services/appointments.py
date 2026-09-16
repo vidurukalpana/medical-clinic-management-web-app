@@ -1,11 +1,11 @@
 from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.errors import BadRequestError, ConflictError, NotFoundError
-from app.models import Appointment, Availability, Doctor, DoctorUnavailability
+from app.models import Appointment, Availability, Doctor, DoctorUnavailability, Visit
 from app.schemas.appointment import AppointmentCreate, AvailableSlot
 from app.services.patients import get_patient
 
@@ -64,7 +64,14 @@ def available_slots(
             ):
                 slots.append(AvailableSlot(start_at=start, end_at=slot_end))
             start = slot_end
-    return slots
+    # Older walk-ins have no reservation; conservatively retain their capacity.
+    unreserved_visits = db.scalar(select(func.count()).select_from(Visit).where(
+        Visit.doctor_id == doctor.id,
+        Visit.visit_date == day,
+        Visit.appointment_id.is_(None),
+        Visit.status != "cancelled",
+    )) or 0
+    return slots[unreserved_visits:]
 
 
 def select_slot(
@@ -105,6 +112,7 @@ def reschedule_appointment(
     db: Session, doctor: Doctor, appointment: Appointment,
     start_at: datetime, clinic_timezone: str,
 ) -> Appointment:
+    ensure_not_checked_in(db, appointment)
     if appointment.status != "scheduled":
         raise ConflictError("Only scheduled appointments can be rescheduled.")
     if appointment.start_at <= datetime.now(timezone.utc):
@@ -115,10 +123,16 @@ def reschedule_appointment(
     return appointment
 
 
-def cancel_appointment(appointment: Appointment) -> Appointment:
+def cancel_appointment(db: Session, appointment: Appointment) -> Appointment:
+    ensure_not_checked_in(db, appointment)
     if appointment.status == "cancelled":
         return appointment
     if appointment.status != "scheduled":
         raise ConflictError("Only scheduled appointments can be cancelled.")
     appointment.status = "cancelled"
     return appointment
+
+
+def ensure_not_checked_in(db: Session, appointment: Appointment) -> None:
+    if db.scalar(select(Visit.id).where(Visit.appointment_id == appointment.id)):
+        raise ConflictError("This appointment is checked in. Manage its visit instead.")
