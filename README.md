@@ -167,6 +167,35 @@ Patient management is currently available through these protected REST endpoints
 - `GET /api/patients/{patient_id}` — return one patient's details.
 - `PATCH /api/patients/{patient_id}` — update a patient's details.
 
+## Appointment booking
+
+Appointments are available through authenticated REST endpoints:
+
+- `GET /api/doctors/{doctor_id}/available-slots?day=YYYY-MM-DD` — list available slots for a clinic-local date.
+- `POST /api/appointments` — book a slot using `doctor_id`, `patient_id`, `start_at` and an optional `reason`.
+- `GET /api/appointments/{appointment_id}` — view a booking.
+- `PUT /api/appointments/{appointment_id}/reschedule` — select a new `start_at` for the same doctor.
+- `PUT /api/appointments/{appointment_id}/cancel` — cancel a booking while retaining its record.
+
+Administrators can manage appointments for either doctor. Doctors can manage their own appointments; authenticated staff can view appointments and available slots.
+
+Select a `start_at` returned by the available-slots endpoint. Datetimes must include a timezone offset. Weekly working hours are interpreted using `CLINIC_TIMEZONE` (default `Asia/Colombo`), and the server derives `end_at` from the configured slot duration. Slots exclude past times, inactive doctors, inactive availability, unavailable periods and existing non-cancelled bookings. Partial slots at the end of a working period are omitted.
+
+For example, a booking request has this shape (use a future slot returned by the API):
+
+```json
+{
+  "doctor_id": 1,
+  "patient_id": 1,
+  "start_at": "2030-01-07T09:00:00+05:30",
+  "reason": "Follow-up"
+}
+```
+
+Rescheduling is allowed only for future scheduled appointments. Failed rescheduling preserves the original booking. Cancellation frees the slot and repeating cancellation is safe; completed and no-show appointments cannot be rescheduled or cancelled. Duplicate and overlapping bookings return `409`, missing records return `404`, past booking requests return `400`, and invalid request fields return `422`.
+
+Booking writes lock the doctor's database row until commit so simultaneous booking requests cannot claim overlapping slots. A partial unique database index also prevents two non-cancelled bookings with the same doctor and start time. Restarting the application creates the new appointments table and index automatically. Existing bookings retain their times if working schedules are later edited.
+
 ## Entity relationship diagram
 
 ```mermaid

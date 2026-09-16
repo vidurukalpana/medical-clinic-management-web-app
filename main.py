@@ -8,7 +8,7 @@ from app.core.config import Settings, get_settings
 from app.db.initialize import initialize_database
 from app.db.session import engine
 from app.errors.handlers import register_error_handlers
-from app.routers import admin, auth, doctor_scheduling, doctors, health, patients
+from app.routers import admin, appointments, auth, doctor_scheduling, doctors, health, patients
 
 settings = get_settings()
 
@@ -36,6 +36,7 @@ def create_app(
     application.include_router(doctors.router, prefix="/api")
     application.include_router(doctor_scheduling.router, prefix="/api")
     application.include_router(patients.router, prefix="/api")
+    application.include_router(appointments.router, prefix="/api")
 
     @application.get("/", include_in_schema=False)
     def root() -> dict[str, str]:
