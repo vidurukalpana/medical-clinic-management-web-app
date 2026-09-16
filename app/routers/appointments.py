@@ -9,7 +9,7 @@ from app.errors import ForbiddenError
 from app.errors.appointments import save_appointment
 from app.models import Appointment, Doctor, User, UserRole
 from app.schemas.appointment import (
-    AppointmentCreate, AppointmentRead, AppointmentReschedule, AvailableSlot,
+    AppointmentCreate, AppointmentRead, AppointmentReschedule, AvailableSlot, BookingStatus,
 )
 from app.services import appointments
 
@@ -80,6 +80,16 @@ def cancel_appointment(
     managed: ManagedAppointment, db: DatabaseSession,
 ) -> AppointmentRead:
     _, appointment = managed
-    appointments.cancel_appointment(appointment)
+    appointments.cancel_appointment(db, appointment)
     save_appointment(db)
     return AppointmentRead.model_validate(appointment)
+
+
+@router.get("/doctors/{doctor_id}/booking-status", response_model=BookingStatus)
+def read_booking_status(
+    doctor_id: int, day: Annotated[date, Query()], _: CurrentUser,
+    db: DatabaseSession, settings: AppSettings,
+) -> BookingStatus:
+    doctor = appointments.get_booking_doctor(db, doctor_id)
+    slots = appointments.available_slots(db, doctor, day, settings.timezone)
+    return BookingStatus(remaining_slots=len(slots), is_fully_booked=not slots)

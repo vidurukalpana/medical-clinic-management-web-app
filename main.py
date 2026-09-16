@@ -8,7 +8,7 @@ from app.core.config import Settings, get_settings
 from app.db.initialize import initialize_database
 from app.db.session import engine
 from app.errors.handlers import register_error_handlers
-from app.routers import admin, appointments, auth, doctor_scheduling, doctors, health, patients
+from app.routers import visits, admin, appointments, auth, doctor_scheduling, doctors, health, patients
 
 settings = get_settings()
 
@@ -30,6 +30,7 @@ def create_app(
         lifespan=lifespan,
     )
     register_error_handlers(application)
+    application.include_router(visits.router, prefix="/api")
     application.include_router(health.router, prefix="/api")
     application.include_router(auth.router, prefix="/api")
     application.include_router(admin.router, prefix="/api")

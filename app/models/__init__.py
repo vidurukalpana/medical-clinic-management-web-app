@@ -1,3 +1,4 @@
+from app.models.visit import Visit
 from app.models.appointment import Appointment
 from app.models.auth_session import AuthSession
 from app.models.doctor import Doctor
@@ -9,6 +10,7 @@ from app.models.patient import Patient, PatientGender
 from app.models.user import User, UserRole
 
 __all__ = [
+    "Visit",
     "Appointment",
     "AuthSession",
     "Availability",

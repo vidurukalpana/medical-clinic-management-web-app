@@ -141,7 +141,7 @@ Logged-in users can change their password with `PUT /api/auth/password`. They mu
 
 ## Doctor scheduling
 
-Availability records define a doctor's weekday, working period and appointment-slot duration. Weekdays use `0` for Monday through `4` for Friday. Unavailability records use `start_at` and `end_at`, so they can block part of a day, a full day or several days.
+Availability records define a doctor's weekday, working period and appointment-slot duration. The default is 10 minutes per patient (12 slots in two hours, or 18 in three hours). A different duration can still be specified explicitly when managing a schedule. Weekdays use `0` for Monday through `4` for Friday. Unavailability records use `start_at` and `end_at`, so they can block part of a day, a full day or several days.
 
 - `GET /api/doctors/{doctor_id}/availability` — list weekly availability.
 - `POST /api/doctors/{doctor_id}/availability` — add an availability period.
@@ -195,6 +195,28 @@ For example, a booking request has this shape (use a future slot returned by the
 Rescheduling is allowed only for future scheduled appointments. Failed rescheduling preserves the original booking. Cancellation frees the slot and repeating cancellation is safe; completed and no-show appointments cannot be rescheduled or cancelled. Duplicate and overlapping bookings return `409`, missing records return `404`, past booking requests return `400`, and invalid request fields return `422`.
 
 Booking writes lock the doctor's database row until commit so simultaneous booking requests cannot claim overlapping slots. A partial unique database index also prevents two non-cancelled bookings with the same doctor and start time. Restarting the application creates the new appointments table and index automatically. Existing bookings retain their times if working schedules are later edited.
+
+## OPD visits and daily queue
+
+- `POST /api/appointments/{appointment_id}/check-in` — check in a scheduled appointment on its clinic-local date. Send `{}` or an optional `presenting_complaint`.
+- `POST /api/visits/walk-in` — reserve a slot and queue a registered patient arriving without an appointment. Send `doctor_id`, `patient_id` and optional `presenting_complaint`.
+- `GET /api/doctors/{doctor_id}/queue` — list today's visits in reserved consultation-time order. Use `?day=YYYY-MM-DD` to view another date.
+- `GET /api/visits/{visit_id}` — view a visit and its consultation details.
+- `PATCH /api/visits/{visit_id}` — update `status`, `presenting_complaint`, `diagnosis`, `clinical_notes` or `treatment_plan`.
+
+Administrators manage either doctor's visits; doctors manage their own. Authenticated staff can read visits and queues. Walk-in patients must first be registered using the patient API. Walk-ins automatically reserve the next remaining slot today, using the doctor’s working hours and configured slot duration. The doctor must be active. If no future slot remains (including days without working hours or blocked by leave), the API returns `409` with “Doctor is fully booked.” Existing appointment holders can still check in when no free slots remain.
+
+`GET /api/doctors/{doctor_id}/booking-status?day=YYYY-MM-DD` returns `remaining_slots` and `is_fully_booked`. Here, fully booked means no slots can be accepted for that date, including when the doctor is inactive or unavailable. The existing available-slots API also excludes slots reserved by walk-ins.
+
+Walk-ins now receive an automatically created appointment reservation, returned as `appointment_id` in the visit response. Reservation and visit are saved together, so a rejected request creates neither. Cancelling the visit releases its slot; completing it keeps the slot occupied. Existing visits without reservations conservatively consume one remaining slot each on their visit date unless cancelled. No database columns or ERD changes are needed for this capacity update.
+
+Queue numbers start at 1 for each doctor each day in `CLINIC_TIMEZONE`. Appointments and walk-ins share the same queue. Queue numbers are stable arrival tickets, are safe under simultaneous requests, and are never reused after cancellation. The queue response is ordered by reserved consultation time, not ticket number, and includes `start_at` and `end_at`. Older visits without reservations appear last. Use waiting status to identify patients ready for consultation; completed and cancelled records remain visible for reference. The queue includes completed and cancelled visits with their statuses. A patient cannot have more than one waiting or in-progress visit for the same doctor and date, and an appointment can be checked in only once.
+
+Visits start as `waiting`. Move them to `in_progress` when consultation begins, then to `completed` when finished. Waiting or in-progress visits may instead become `cancelled`. Completed and cancelled visits cannot be edited. Clinical fields can be saved together with a status change; send `null` to clear an optional clinical field.
+
+Completing or cancelling a visit updates its linked appointment in the same transaction. After check-in, use the visit API to manage the consultation; appointment rescheduling and cancellation are blocked. Invalid status transitions and duplicate check-ins return `409`; check-in on the wrong date returns `400`.
+
+Restart the application to create the visits table and constraints. No new environment settings are required. The table stores `visit_date` to support daily queue numbering; the existing ERD remains unchanged.
 
 ## Entity relationship diagram
 

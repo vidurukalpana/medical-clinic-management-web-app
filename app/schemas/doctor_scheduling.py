@@ -7,7 +7,7 @@ class AvailabilityCreate(BaseModel):
     weekday: int = Field(ge=0, le=4)
     start_time: time
     end_time: time
-    slot_duration_minutes: int = Field(ge=5, le=240)
+    slot_duration_minutes: int = Field(default=10, ge=5, le=240)
     is_active: bool = True
 
     @model_validator(mode="after")
