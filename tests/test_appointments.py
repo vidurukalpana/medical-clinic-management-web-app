@@ -144,8 +144,8 @@ def test_equivalent_timezone_and_partial_slot(client, booking):
                        json={**payload, "start_at": utc_start.isoformat()}).status_code == 201
     assert client.post("/api/appointments", headers=headers, json=payload).status_code == 409
     assert client.put(f"{url}/{schedule_id}", headers=headers,
-                      json=availability_payload(is_active=False)).status_code == 200
-    assert client.get(slots_url, headers=headers).json() == []
+                      json=availability_payload(is_active=False)).status_code == 409
+    assert len(client.get(slots_url, headers=headers).json()) == 1
 
 
 def test_guest_booking_private_management_and_minimal_data(client, booking):

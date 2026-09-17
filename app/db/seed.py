@@ -54,7 +54,8 @@ def seed_initial_accounts(db: Session, settings: Settings) -> None:
             password_setting_name=initial_doctor.password_setting_name,
             role=UserRole.DOCTOR,
         )
-        _create_doctor_if_missing(db, user, initial_doctor)
+        if user.role == UserRole.DOCTOR:
+            _create_doctor_if_missing(db, user, initial_doctor)
 
     db.commit()
 
@@ -69,10 +70,6 @@ def _create_user_if_missing(
     normalized_username = normalize_username(username)
     user = db.scalar(select(User).where(User.username == normalized_username))
     if user is not None:
-        if user.role != role:
-            raise RuntimeError(
-                f"Initial username '{normalized_username}' already has another role."
-            )
         return user
 
     if not password:

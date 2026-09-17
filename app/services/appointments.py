@@ -4,9 +4,9 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.errors import BadRequestError, ConflictError, NotFoundError
-from app.models import Appointment, Availability, Doctor, DoctorUnavailability, Visit
-from app.schemas.appointment import AppointmentCreate, AvailableSlot
+from app.errors import BadRequestError, ConflictError, ForbiddenError, NotFoundError
+from app.models import Appointment, Availability, Doctor, DoctorUnavailability, User, UserRole, Visit
+from app.schemas.appointment import AppointmentCreate, AppointmentPage, AppointmentRead, AvailableSlot
 from app.services.patients import get_patient
 
 
@@ -136,3 +136,51 @@ def cancel_appointment(db: Session, appointment: Appointment) -> Appointment:
 def ensure_not_checked_in(db: Session, appointment: Appointment) -> None:
     if db.scalar(select(Visit.id).where(Visit.appointment_id == appointment.id)):
         raise ConflictError("This appointment is checked in. Manage its visit instead.")
+
+
+
+def mark_no_show(db: Session, appointment: Appointment) -> Appointment:
+    ensure_not_checked_in(db, appointment)
+    if appointment.status == "no_show":
+        return appointment
+    if appointment.status != "scheduled":
+        raise ConflictError("Only scheduled appointments can be marked as no-show.")
+    if appointment.end_at > datetime.now(timezone.utc):
+        raise ConflictError("An appointment can be marked as no-show only after it ends.")
+    appointment.status = "no_show"
+    return appointment
+
+
+def list_appointments(
+    db: Session, user: User, clinic_timezone: str, *, doctor_id: int | None,
+    patient_id: int | None, date_from: date | None, date_to: date | None,
+    status: str | None, offset: int, limit: int,
+) -> AppointmentPage:
+
+    if date_from is not None and date_to is not None and date_from > date_to:
+        raise BadRequestError("date_from must not be after date_to.")
+    filters = []
+    if user.role == UserRole.DOCTOR:
+        if user.doctor is None or (doctor_id is not None and doctor_id != user.doctor.id):
+            raise ForbiddenError("You can view only your own appointments.")
+        doctor_id = user.doctor.id
+    if doctor_id is not None:
+        get_booking_doctor(db, doctor_id)
+        filters.append(Appointment.doctor_id == doctor_id)
+    if patient_id is not None:
+        filters.append(Appointment.patient_id == patient_id)
+    zone = ZoneInfo(clinic_timezone)
+    if date_from is not None:
+        filters.append(Appointment.start_at >= datetime.combine(date_from, time.min, zone))
+    if date_to is not None:
+        if date_to == date.max:
+            raise BadRequestError("date_to must be earlier than 9999-12-31.")
+        filters.append(Appointment.start_at < datetime.combine(date_to + timedelta(days=1), time.min, zone))
+    if status is not None:
+        filters.append(Appointment.status == status)
+    rows = db.scalars(select(Appointment).where(*filters).order_by(
+        Appointment.start_at, Appointment.id,
+    ).offset(offset).limit(limit))
+    return AppointmentPage(items=[AppointmentRead.model_validate(row) for row in rows],
+                           total=db.scalar(select(func.count()).select_from(Appointment).where(*filters)),
+                           offset=offset, limit=limit)

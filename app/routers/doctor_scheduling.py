@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Response, status
+from app.routers.appointments import AppSettings
 
 from app.dependencies import (
     DatabaseSession,
@@ -71,8 +72,9 @@ def replace_availability(
     schedule: AvailabilityCreate,
     availability: ScheduleAvailability,
     db: DatabaseSession,
+    settings: AppSettings,
 ) -> AvailabilityRead:
-    availability = update_availability(db, availability, schedule)
+    availability = update_availability(db, availability, schedule, settings.timezone)
     return AvailabilityRead.model_validate(availability)
 
 
@@ -84,8 +86,9 @@ def replace_availability(
 def remove_availability(
     availability: ScheduleAvailability,
     db: DatabaseSession,
+    settings: AppSettings,
 ) -> Response:
-    delete_availability(db, availability)
+    delete_availability(db, availability, settings.timezone)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
