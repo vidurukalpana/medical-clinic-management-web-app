@@ -3,14 +3,14 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.errors import DuplicateRegistrationNumberError, NotFoundError
-from app.models import Doctor, User, UserRole
+from app.models import Doctor, User
 from app.schemas.doctor import DoctorAdminUpdate, DoctorSelfUpdate
 
 
-def list_doctors(db: Session, current_user: User) -> list[Doctor]:
-    statement = select(Doctor).order_by(Doctor.id)
-    if current_user.role != UserRole.ADMINISTRATOR:
-        statement = statement.where(Doctor.is_active.is_(True))
+def list_doctors(db: Session) -> list[Doctor]:
+    statement = select(Doctor).join(User).where(
+        Doctor.is_active.is_(True), User.is_active.is_(True),
+    ).order_by(Doctor.id)
     return list(db.scalars(statement))
 
 

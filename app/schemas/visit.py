@@ -3,13 +3,14 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.schemas.appointment import AppointmentRead
+
 VisitStatus = Literal["waiting", "in_progress", "completed", "cancelled"]
 
 
 class VisitCheckIn(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-    presenting_complaint: str | None = Field(default=None, max_length=10000)
 
 
 class WalkInCreate(VisitCheckIn):
@@ -19,9 +20,6 @@ class WalkInCreate(VisitCheckIn):
 
 class VisitUpdate(VisitCheckIn):
     status: VisitStatus | None = None
-    diagnosis: str | None = Field(default=None, max_length=10000)
-    clinical_notes: str | None = Field(default=None, max_length=20000)
-    treatment_plan: str | None = Field(default=None, max_length=10000)
 
     @field_validator("status")
     @classmethod
@@ -49,7 +47,50 @@ class VisitRead(BaseModel):
     start_at: datetime | None
     end_at: datetime | None
     status: VisitStatus
-    presenting_complaint: str | None
-    diagnosis: str | None
-    clinical_notes: str | None
-    treatment_plan: str | None
+
+
+class DashboardAction(BaseModel):
+    label: str
+    method: Literal["POST", "PUT", "PATCH"]
+    path: str
+    body: dict[str, str | int] = Field(default_factory=dict)
+
+
+class DashboardAppointment(AppointmentRead):
+    patient_name: str
+    doctor_name: str
+    visit_id: int | None
+    actions: list[DashboardAction] = Field(default_factory=list)
+
+
+class DashboardVisit(VisitRead):
+    patient_name: str
+    actions: list[DashboardAction] = Field(default_factory=list)
+
+
+class DoctorQueue(BaseModel):
+    doctor_id: int
+    doctor_name: str
+    is_active: bool
+    waiting_count: int
+    in_progress_count: int
+    patients: list[DashboardVisit]
+
+
+class DashboardSummary(BaseModel):
+    appointments: int
+    scheduled: int
+    waiting: int
+    in_progress: int
+    completed: int
+    cancelled: int
+    no_show: int
+
+
+class DashboardRead(BaseModel):
+    day: date
+    timezone: str
+    generated_at: datetime
+    summary: DashboardSummary
+    appointments: list[DashboardAppointment]
+    doctor_queues: list[DoctorQueue]

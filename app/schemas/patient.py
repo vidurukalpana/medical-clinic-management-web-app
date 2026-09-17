@@ -6,19 +6,19 @@ from app.models import PatientGender
 
 
 class PatientCreate(BaseModel):
-    model_config = ConfigDict(str_strip_whitespace=True)
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
     full_name: str = Field(min_length=2, max_length=150)
-    date_of_birth: date
-    gender: PatientGender
+    date_of_birth: date | None = None
+    gender: PatientGender = PatientGender.NOT_SPECIFIED
     phone: str = Field(min_length=7, max_length=30)
     address: str | None = Field(default=None, max_length=1000)
     emergency_contact: str | None = Field(default=None, max_length=200)
 
     @field_validator("date_of_birth")
     @classmethod
-    def date_of_birth_cannot_be_in_the_future(cls, value: date) -> date:
-        if value > date.today():
+    def date_of_birth_cannot_be_in_the_future(cls, value: date | None) -> date | None:
+        if value is not None and value > date.today():
             raise ValueError("Date of birth cannot be in the future.")
         return value
 
@@ -29,7 +29,7 @@ class PatientCreate(BaseModel):
 
 
 class PatientUpdate(BaseModel):
-    model_config = ConfigDict(str_strip_whitespace=True)
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
     full_name: str | None = Field(default=None, min_length=2, max_length=150)
     date_of_birth: date | None = None
@@ -69,8 +69,8 @@ class PatientRead(BaseModel):
     id: int
     medical_record_number: str
     full_name: str
-    date_of_birth: date
-    gender: PatientGender
+    date_of_birth: date | None = None
+    gender: PatientGender = PatientGender.NOT_SPECIFIED
     phone: str
     address: str | None
     emergency_contact: str | None

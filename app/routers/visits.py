@@ -1,14 +1,14 @@
 from datetime import date
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, Response, status
 
 from app.dependencies import CurrentUser, DatabaseSession
 from app.errors import ForbiddenError
 from app.errors.visits import save_visit
 from app.models import Doctor, User, UserRole, Visit
 from app.routers.appointments import AppSettings, ManagedAppointment
-from app.schemas.visit import VisitCheckIn, VisitRead, VisitUpdate, WalkInCreate
+from app.schemas.visit import DashboardRead, VisitCheckIn, VisitRead, VisitUpdate, WalkInCreate
 from app.services import appointments, visits
 
 router = APIRouter(tags=["OPD visits"])
@@ -43,7 +43,7 @@ def check_in_appointment(
 ) -> VisitRead:
     doctor, appointment = managed
     visit = visits.check_in(
-        db, doctor, appointment, data.presenting_complaint, settings.timezone,
+        db, doctor, appointment, settings.timezone,
     )
     save_visit(db)
     return VisitRead.model_validate(visit)
@@ -57,7 +57,7 @@ def add_walk_in(
     doctor = appointments.get_booking_doctor(db, data.doctor_id, lock=True)
     require_visit_manager(doctor, user)
     visit = visits.create_walk_in(
-        db, doctor, data.patient_id, data.presenting_complaint,
+        db, doctor, data.patient_id,
         settings.timezone,
     )
     save_visit(db)
@@ -66,18 +66,19 @@ def add_walk_in(
 
 @router.get("/doctors/{doctor_id}/queue", response_model=list[VisitRead])
 def read_queue(
-    doctor_id: int, _: CurrentUser, db: DatabaseSession,
+    doctor_id: int, user: CurrentUser, db: DatabaseSession,
     settings: AppSettings, day: date | None = None,
 ) -> list[VisitRead]:
-    appointments.get_booking_doctor(db, doctor_id)
+    doctor = appointments.get_booking_doctor(db, doctor_id)
+    require_visit_manager(doctor, user)
     return [VisitRead.model_validate(visit) for visit in visits.list_queue(
         db, doctor_id, day or visits.clinic_today(settings.timezone),
     )]
 
 
 @router.get("/visits/{visit_id}", response_model=VisitRead)
-def read_visit(visit_id: int, _: CurrentUser, db: DatabaseSession) -> VisitRead:
-    return VisitRead.model_validate(visits.get_visit(db, visit_id))
+def read_visit(visit: ManagedVisit) -> VisitRead:
+    return VisitRead.model_validate(visit)
 
 
 @router.patch("/visits/{visit_id}", response_model=VisitRead)
@@ -87,3 +88,12 @@ def edit_visit(
     visits.update_visit(db, visit, data)
     save_visit(db)
     return VisitRead.model_validate(visit)
+
+
+@router.get("/dashboard", response_model=DashboardRead, tags=["dashboard"])
+def read_dashboard(
+    user: CurrentUser, db: DatabaseSession, settings: AppSettings, response: Response,
+    doctor_id: Annotated[int | None, Query(gt=0)] = None,
+) -> DashboardRead:
+    response.headers["Cache-Control"] = "no-store"
+    return visits.dashboard(db, user, settings.timezone, doctor_id)

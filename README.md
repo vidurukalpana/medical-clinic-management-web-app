@@ -1,20 +1,20 @@
-# Medical Clinic Management Web Application
+# Medical Clinic Booking and Queue API
 
-A simple web application for managing an OPD clinic operated by two doctors. It brings patient registration, doctor schedules, appointments, consultations and prescriptions into one system.
+A FastAPI backend for public appointment booking and staff-managed clinic queues. Patients can book without creating an account. Optional patient accounts provide access to bookings made while signed in. The repository provides APIs and interactive `/docs`, with no application UI. Public patient booking and the staff dashboard are available through the API.
 
-The first version is designed for local use.
+## Scope and privacy
 
-## Main features
+- Public doctor profiles, available appointment slots and remaining capacity.
+- Guest booking with name and phone number only, alongside doctor and selected time.
+- Private booking management using a random token; only its SHA-256 hash is stored.
+- Optional patient registration and login; patient accounts never grant staff access.
+- Staff login for patient registration, schedules, check-in, walk-ins and queue management.
+- Doctors can access only their own appointments and queues; administrators can manage either doctor.
+- No prescription, diagnosis, symptom, consultation-note or treatment-plan fields in the booking/queue API or new database schema. Unknown clinical fields are rejected.
 
-- Secure login for administrators and doctors.
-- Patient registration, search and visit history.
-- Working schedules and unavailability periods for both doctors.
-- Appointment booking, rescheduling and cancellation.
-- Prevention of duplicate bookings for the same doctor and time.
-- Patient check-in, walk-in registration and a daily OPD queue.
-- Consultation notes, diagnoses and treatment plans.
-- Prescriptions with medicine instructions and printable output.
-- A dashboard showing today's appointments and waiting patients.
+Guest bookings create a minimal patient record with no required birth date, gender, address or emergency contact. Staff can still maintain optional demographic/contact information. Names and phone numbers are not treated as proof of identity, and guest submissions never attach themselves to an existing patient record by matching these values.
+
+**Phone verification is not implemented:** no SMS/email provider is configured. A booking management token proves possession of that token, not ownership of a phone number or a medical identity. Keep it private. Before public deployment, integrate contact verification and abuse protection/rate limiting at the API gateway or application layer. Use HTTPS and avoid logging authorization headers, booking tokens or request bodies.
 
 ## Technology
 
@@ -133,13 +133,14 @@ Logged-in users can change their password with `PUT /api/auth/password`. They mu
 - `GET /api/auth/me` — return the logged-in account and doctor profile.
 - `PUT /api/auth/password` — change the logged-in user's password.
 - `PUT /api/admin/users/{user_id}/password` — let an administrator reset a user's password.
-- `GET /api/doctors` — list doctor profiles.
+- `GET /api/admin/doctors` — list all profiles, including inactive doctors and staff fields (administrator only).
+- `GET /api/doctors` — publicly list active doctors (name and registration number only).
 - `GET /api/doctors/me` — return the logged-in doctor's profile.
 - `PATCH /api/doctors/me` — let a doctor update their own profile.
-- `GET /api/doctors/{doctor_id}` — return one doctor profile.
+- `GET /api/doctors/{doctor_id}` — publicly return one active doctor profile.
 - `PATCH /api/doctors/{doctor_id}` — let an administrator update a doctor profile.
 
-## Doctor scheduling
+## Staff doctor scheduling
 
 Availability records define a doctor's weekday, working period and appointment-slot duration. The default is 10 minutes per patient (12 slots in two hours, or 18 in three hours). A different duration can still be specified explicitly when managing a schedule. Weekdays use `0` for Monday through `4` for Friday. Unavailability records use `start_at` and `end_at`, so they can block part of a day, a full day or several days.
 
@@ -152,7 +153,7 @@ Availability records define a doctor's weekday, working period and appointment-s
 - `PUT /api/doctors/{doctor_id}/unavailability/{unavailability_id}` — replace an unavailable period.
 - `DELETE /api/doctors/{doctor_id}/unavailability/{unavailability_id}` — remove an unavailable period.
 
-## Patient management
+## Staff patient management
 
 After logging in, administrators and doctors can:
 
@@ -167,63 +168,107 @@ Patient management is currently available through these protected REST endpoints
 - `GET /api/patients/{patient_id}` — return one patient's details.
 - `PATCH /api/patients/{patient_id}` — update a patient's details.
 
-## Appointment booking
+## Staff dashboard API
 
-Appointments are available through authenticated REST endpoints:
+Call `GET /api/dashboard` with an administrator or doctor bearer token. No dashboard HTML page is served.
 
-- `GET /api/doctors/{doctor_id}/available-slots?day=YYYY-MM-DD` — list available slots for a clinic-local date.
-- `POST /api/appointments` — book a slot using `doctor_id`, `patient_id`, `start_at` and an optional `reason`.
-- `GET /api/appointments/{appointment_id}` — view a booking.
-- `PUT /api/appointments/{appointment_id}/reschedule` — select a new `start_at` for the same doctor.
-- `PUT /api/appointments/{appointment_id}/cancel` — cancel a booking while retaining its record.
+- Today's appointment list includes patient names, doctors, times and status, sorted by reserved time.
+- Summary fields report total appointments, waiting patients, in-progress consultations and completed visits.
+- Doctor queues contain only waiting/in-progress visits; completed and cancelled visits leave the active queue.
+- Administrators can see all doctors or filter by one doctor. A doctor can see only their own appointments and queue. Patient accounts cannot access dashboard data.
+- Quick actions use `POST /api/patients`, `POST /api/appointments`, and `POST /api/visits/walk-in` for registration, booking and walk-ins.
+- Each appointment or queue entry includes allowed actions with a label, HTTP method, API path and request body for check-in, start, complete or cancel. The mutation endpoints enforce permissions and check conflicts again.
 
-Administrators can manage appointments for either doctor. Doctors can manage their own appointments; authenticated staff can view appointments and available slots.
+`GET /api/dashboard` returns a staff-authenticated daily snapshot. Optional `doctor_id` filters the snapshot, subject to the same ownership checks. Responses use `Cache-Control: no-store` and contain no patient phone numbers, clinical fields or booking tokens.
 
-Select a `start_at` returned by the available-slots endpoint. Datetimes must include a timezone offset. Weekly working hours are interpreted using `CLINIC_TIMEZONE` (default `Asia/Colombo`), and the server derives `end_at` from the configured slot duration. Slots exclude past times, inactive doctors, inactive availability, unavailable periods and existing non-cancelled bookings. Partial slots at the end of a working period are omitted.
+“Today” uses `CLINIC_TIMEZONE` (default `Asia/Colombo`), with an inclusive local midnight and exclusive next midnight. Appointment totals include cancelled/no-show bookings; scheduled, cancelled and no-show subtotals are provided separately. Waiting, in-progress and completed counts refer to visits on that clinic date, including legacy walk-ins without appointments. Empty doctor queues remain visible, including inactive doctors for administrators, so existing work is not hidden.
 
-For example, a booking request has this shape (use a future slot returned by the API):
+The dashboard uses existing API endpoints and does not require a schema change beyond the earlier booking upgrade.
+
+## Guest booking
+
+No login is required for these endpoints:
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /api/doctors` | Browse active doctors |
+| `GET /api/doctors/{doctor_id}` | View public doctor details |
+| `GET /api/doctors/{doctor_id}/available-slots?day=2030-01-07` | Browse slots |
+| `GET /api/doctors/{doctor_id}/booking-status?day=2030-01-07` | Check remaining capacity |
+| `POST /api/guest/appointments` | Book using name, phone, doctor and time |
+
+Example guest request (choose an actual available future slot):
 
 ```json
 {
   "doctor_id": 1,
-  "patient_id": 1,
   "start_at": "2030-01-07T09:00:00+05:30",
-  "reason": "Follow-up"
+  "full_name": "Nimal Perera",
+  "phone": "+94771234567"
 }
 ```
 
-Rescheduling is allowed only for future scheduled appointments. Failed rescheduling preserves the original booking. Cancellation frees the slot and repeating cancellation is safe; completed and no-show appointments cannot be rescheduled or cancelled. Duplicate and overlapping bookings return `409`, missing records return `404`, past booking requests return `400`, and invalid request fields return `422`.
+The response contains `id`, `doctor_id`, `start_at`, `end_at`, `status`, and a one-time-displayed `management_token`. Save the token securely. The API sends `Cache-Control: no-store`. It does not expose the patient ID, contact details or token hash.
 
-Booking writes lock the doctor's database row until commit so simultaneous booking requests cannot claim overlapping slots. A partial unique database index also prevents two non-cancelled bookings with the same doctor and start time. Restarting the application creates the new appointments table and index automatically. Existing bookings retain their times if working schedules are later edited.
+Send the token in the `X-Booking-Token` header for:
 
-## OPD visits and daily queue
+- `GET /api/guest/appointments/{appointment_id}`
+- `PUT /api/guest/appointments/{appointment_id}/cancel`
+- `PUT /api/guest/appointments/{appointment_id}/reschedule` with `{"start_at": "...timezone-aware datetime..."}`
 
-- `POST /api/appointments/{appointment_id}/check-in` — check in a scheduled appointment on its clinic-local date. Send `{}` or an optional `presenting_complaint`.
-- `POST /api/visits/walk-in` — reserve a slot and queue a registered patient arriving without an appointment. Send `doctor_id`, `patient_id` and optional `presenting_complaint`.
-- `GET /api/doctors/{doctor_id}/queue` — list today's visits in reserved consultation-time order. Use `?day=YYYY-MM-DD` to view another date.
-- `GET /api/visits/{visit_id}` — view a visit and its consultation details.
-- `PATCH /api/visits/{visit_id}` — update `status`, `presenting_complaint`, `diagnosis`, `clinical_notes` or `treatment_plan`.
+Tokens are scoped to a single booking and expire 24 hours after its current end time. They cannot retrieve patient records or other bookings. Lost tokens require staff assistance; the API does not recover them using an unverified phone number.
 
-Administrators manage either doctor's visits; doctors manage their own. Authenticated staff can read visits and queues. Walk-in patients must first be registered using the patient API. Walk-ins automatically reserve the next remaining slot today, using the doctor’s working hours and configured slot duration. The doctor must be active. If no future slot remains (including days without working hours or blocked by leave), the API returns `409` with “Doctor is fully booked.” Existing appointment holders can still check in when no free slots remain.
+## Optional patient accounts
 
-`GET /api/doctors/{doctor_id}/booking-status?day=YYYY-MM-DD` returns `remaining_slots` and `is_fully_booked`. Here, fully booked means no slots can be accepted for that date, including when the doctor is inactive or unavailable. The existing available-slots API also excludes slots reserved by walk-ins.
+`POST /api/auth/register-patient` accepts only `username` and `password` (at least 12 characters). The server assigns the patient role. Login uses the existing `/api/auth/login` endpoint.
 
-Walk-ins now receive an automatically created appointment reservation, returned as `appointment_id` in the visit response. Reservation and visit are saved together, so a rejected request creates neither. Cancelling the visit releases its slot; completing it keeps the slot occupied. Existing visits without reservations conservatively consume one remaining slot each on their visit date unless cancelled. No database columns or ERD changes are needed for this capacity update.
+To associate a new booking with the account, include its bearer token when calling `/api/guest/appointments`. Booking without a token remains supported. Existing guest bookings are not automatically claimed through a matching name or phone number.
 
-Queue numbers start at 1 for each doctor each day in `CLINIC_TIMEZONE`. Appointments and walk-ins share the same queue. Queue numbers are stable arrival tickets, are safe under simultaneous requests, and are never reused after cancellation. The queue response is ordered by reserved consultation time, not ticket number, and includes `start_at` and `end_at`. Older visits without reservations appear last. Use waiting status to identify patients ready for consultation; completed and cancelled records remain visible for reference. The queue includes completed and cancelled visits with their statuses. A patient cannot have more than one waiting or in-progress visit for the same doctor and date, and an appointment can be checked in only once.
+- `GET /api/my/appointments` returns up to 100 recent bookings made with that account.
+- `PUT /api/my/appointments/{appointment_id}/cancel` cancels an owned booking.
+- `PUT /api/my/appointments/{appointment_id}/reschedule` moves an owned booking.
 
-Visits start as `waiting`. Move them to `in_progress` when consultation begins, then to `completed` when finished. Waiting or in-progress visits may instead become `cancelled`. Completed and cancelled visits cannot be edited. Clinical fields can be saved together with a status change; send `null` to clear an optional clinical field.
+Patients can change their password and log out. They cannot use staff patient, scheduling, appointment or queue APIs.
 
-Completing or cancelling a visit updates its linked appointment in the same transaction. After check-in, use the visit API to manage the consultation; appointment rescheduling and cancellation are blocked. Invalid status transitions and duplicate check-ins return `409`; check-in on the wrong date returns `400`.
+## Staff appointments and queues
 
-Restart the application to create the visits table and constraints. No new environment settings are required. The table stores `visit_date` to support daily queue numbering; the existing ERD remains unchanged.
+`POST /api/appointments` accepts `doctor_id`, `patient_id`, and timezone-aware `start_at`. It requires an administrator or the assigned doctor. The same permissions apply to reading, cancelling and rescheduling through `/api/appointments/{appointment_id}`.
 
-## Entity relationship diagram
+- `POST /api/appointments/{appointment_id}/check-in` accepts `{}` on the clinic-local appointment date.
+- `POST /api/visits/walk-in` accepts `doctor_id` and `patient_id` and reserves the next available slot.
+- `GET /api/doctors/{doctor_id}/queue` returns the assigned doctor's queue; optional `day` defaults to the clinic-local date.
+- `GET /api/visits/{visit_id}` returns an authorized visit.
+- `PATCH /api/visits/{visit_id}` accepts only `status`.
+
+Visits move from `waiting` to `in_progress` to `completed`. Waiting or in-progress visits may be cancelled. Completed/cancelled visits cannot be edited. Completing or cancelling a visit also updates its appointment. Checked-in bookings must be managed through the staff visit workflow.
+
+Database row locks serialize booking and queue allocation per doctor. Conflicting bookings return 409, and failed guest bookings do not leave orphan patient records. Cancelled reservations release capacity.
+
+## Existing database upgrade
+
+New installations create the revised schema automatically. Existing installations need this in-place upgrade before running the revised app:
+
+```bash
+python -m app.db.initialize
+```
+
+This adds guest-token/account ownership columns and makes birth date optional. It preserves existing rows and does not delete legacy clinical data.
+
+To permanently remove the old clinical columns and their contents after the clinic has authorized their deletion, run:
+
+```bash
+python -m app.db.initialize --purge-clinical-data
+```
+
+The purge removes appointment `reason` and visit `presenting_complaint`, `diagnosis`, `clinical_notes`, and `treatment_plan`. It is explicit, transactional and repeatable, and does not happen automatically at startup. No prescription tables existed in this implementation; the obsolete planned entities have been removed from the diagram. Existing backups and external copies are outside this command's scope.
+
+## Data model
 
 ```mermaid
 erDiagram
     USER ||--o| DOCTOR : has_profile
     USER ||--o{ AUTH_SESSION : opens
+    USER o|--o{ APPOINTMENT : optionally_books
     DOCTOR ||--o{ AVAILABILITY : defines
     DOCTOR ||--o{ DOCTOR_UNAVAILABILITY : blocks
     DOCTOR ||--o{ APPOINTMENT : receives
@@ -231,8 +276,6 @@ erDiagram
     APPOINTMENT o|--o| VISIT : may_create
     DOCTOR ||--o{ VISIT : conducts
     PATIENT ||--o{ VISIT : attends
-    VISIT ||--o| PRESCRIPTION : has
-    PRESCRIPTION ||--|{ PRESCRIPTION_ITEM : contains
 
     USER {
         int id PK
@@ -294,7 +337,8 @@ erDiagram
         int patient_id FK
         datetime start_at
         datetime end_at
-        string reason
+        string guest_token_hash
+        int booked_by_user_id FK
         string status
     }
 
@@ -305,71 +349,6 @@ erDiagram
         int patient_id FK
         int queue_number
         string status
-        text presenting_complaint
-        text diagnosis
-        text clinical_notes
-        text treatment_plan
     }
 
-    PRESCRIPTION {
-        int id PK
-        int visit_id FK, UK
-        datetime issued_at
-        text general_instructions
-    }
-
-    PRESCRIPTION_ITEM {
-        int id PK
-        int prescription_id FK
-        string medicine_name
-        string dose
-        string frequency
-        string duration
-        string instructions
-    }
 ```
-
-### How to read the diagram
-
-- `PK` means primary key: the unique identifier of a record.
-- `FK` means foreign key: a reference to a record in another entity.
-- `UK` means unique key: a value that cannot be repeated.
-- `||` means exactly one.
-- `o|` means zero or one.
-- `o{` means zero or many.
-- `|{` means one or many.
-
-### Entities
-
-- **User:** Stores login and access information. A user may have one doctor profile.
-- **Authentication session:** Stores a hashed login token, its expiry time and when it was revoked. A user can have multiple sessions.
-- **Doctor:** Stores the professional details of each doctor and connects them to their login account.
-- **Patient:** Stores patient identity and contact information. One patient can have many appointments and visits.
-- **Availability:** Stores the normal weekdays and hours during which a doctor accepts appointments.
-- **Doctor unavailability:** Blocks a specific date or time when a doctor is not available, such as leave.
-- **Appointment:** Stores a scheduled booking between a patient and a doctor. Its status shows whether it is scheduled, completed, cancelled or a no-show.
-- **Visit:** Represents the patient's actual OPD consultation. It stores the queue number, complaint, diagnosis, clinical notes and treatment plan.
-- **Prescription:** Stores the general prescription information for a visit.
-- **Prescription item:** Stores each medicine in a prescription, including its dose, frequency, duration and instructions.
-
-### Main relationships
-
-- One doctor can define many availability and unavailability periods.
-- One user can open many authentication sessions. Logging out revokes the current session.
-- One doctor can receive many appointments, but each appointment belongs to one doctor.
-- One patient can make many appointments, but each appointment belongs to one patient.
-- A scheduled appointment may create one visit when the patient checks in.
-- A walk-in patient creates a visit without an appointment. This is why the appointment reference in `VISIT` is optional.
-- Every visit belongs to one patient and is conducted by one doctor.
-- A visit may have one prescription.
-- A prescription must contain one or more prescription items.
-
-### Typical data flow
-
-1. A doctor account and working availability are created.
-2. A patient is registered.
-3. An appointment is booked using an available doctor and time.
-4. When the patient arrives, the appointment creates a visit and a queue number is assigned.
-5. The doctor records the consultation and may create a prescription with one or more medicines.
-
-For a walk-in patient, the process starts with a patient record and a visit; no appointment is required.

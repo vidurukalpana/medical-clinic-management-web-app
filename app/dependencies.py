@@ -42,7 +42,25 @@ def get_current_user(auth_session: CurrentAuthSession) -> User:
     return auth_session.user
 
 
-CurrentUser = Annotated[User, Depends(get_current_user)]
+AuthenticatedUser = Annotated[User, Depends(get_current_user)]
+
+
+def require_staff(user: AuthenticatedUser) -> User:
+    if user.role not in (UserRole.ADMINISTRATOR, UserRole.DOCTOR):
+        raise ForbiddenError("Staff permission required.")
+    return user
+
+
+CurrentUser = Annotated[User, Depends(require_staff)]
+
+
+def optional_user(credentials: BearerCredentials, db: DatabaseSession) -> User | None:
+    if credentials is None:
+        return None
+    return get_active_auth_session(db, credentials.credentials).user
+
+
+OptionalUser = Annotated[User | None, Depends(optional_user)]
 
 
 def require_administrator(current_user: CurrentUser) -> User:

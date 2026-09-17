@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 
 class AppointmentReschedule(BaseModel):
@@ -15,12 +15,6 @@ class AppointmentCreate(AppointmentReschedule):
 
     doctor_id: int = Field(gt=0)
     patient_id: int = Field(gt=0)
-    reason: str | None = Field(default=None, max_length=255)
-
-    @field_validator("reason")
-    @classmethod
-    def empty_reason_is_none(cls, value: str | None) -> str | None:
-        return value or None
 
 
 class AvailableSlot(BaseModel):
@@ -34,10 +28,29 @@ class AppointmentRead(AvailableSlot):
     id: int
     doctor_id: int
     patient_id: int
-    reason: str | None
     status: Literal["scheduled", "completed", "cancelled", "no_show"]
 
 
 class BookingStatus(BaseModel):
     remaining_slots: int
     is_fully_booked: bool
+
+
+class GuestBookingCreate(AppointmentReschedule):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    doctor_id: int = Field(gt=0)
+    full_name: str = Field(min_length=2, max_length=150)
+    phone: str = Field(pattern=r"^\+?[0-9][0-9 ()-]{5,28}[0-9]$")
+
+
+class GuestBookingRead(AvailableSlot):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    doctor_id: int
+    status: Literal["scheduled", "completed", "cancelled", "no_show"]
+
+
+class GuestBookingConfirmation(GuestBookingRead):
+    management_token: str

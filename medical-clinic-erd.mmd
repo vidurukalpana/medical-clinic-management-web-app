@@ -1,6 +1,7 @@
 erDiagram
     USER ||--o| DOCTOR : has_profile
     USER ||--o{ AUTH_SESSION : opens
+    USER o|--o{ APPOINTMENT : optionally_books
     DOCTOR ||--o{ AVAILABILITY : defines
     DOCTOR ||--o{ DOCTOR_UNAVAILABILITY : blocks
     DOCTOR ||--o{ APPOINTMENT : receives
@@ -8,8 +9,6 @@ erDiagram
     APPOINTMENT o|--o| VISIT : may_create
     DOCTOR ||--o{ VISIT : conducts
     PATIENT ||--o{ VISIT : attends
-    VISIT ||--o| PRESCRIPTION : has
-    PRESCRIPTION ||--|{ PRESCRIPTION_ITEM : contains
 
     USER {
         int id PK
@@ -71,7 +70,8 @@ erDiagram
         int patient_id FK
         datetime start_at
         datetime end_at
-        string reason
+        string guest_token_hash
+        int booked_by_user_id FK
         string status
     }
 
@@ -82,25 +82,4 @@ erDiagram
         int patient_id FK
         int queue_number
         string status
-        text presenting_complaint
-        text diagnosis
-        text clinical_notes
-        text treatment_plan
-    }
-
-    PRESCRIPTION {
-        int id PK
-        int visit_id FK, UK
-        datetime issued_at
-        text general_instructions
-    }
-
-    PRESCRIPTION_ITEM {
-        int id PK
-        int prescription_id FK
-        string medicine_name
-        string dose
-        string frequency
-        string duration
-        string instructions
     }
