@@ -95,7 +95,7 @@ def create_appointment(
     appointment = Appointment(
         doctor_id=doctor.id, patient_id=data.patient_id,
         start_at=slot.start_at, end_at=slot.end_at,
-        reason=data.reason, status="scheduled",
+        status="scheduled",
     )
     db.add(appointment)
     return appointment

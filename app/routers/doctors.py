@@ -3,10 +3,10 @@ from fastapi import APIRouter
 from app.dependencies import (
     AdministratorUser,
     CurrentDoctor,
-    CurrentUser,
     DatabaseSession,
 )
-from app.schemas.doctor import DoctorAdminUpdate, DoctorRead, DoctorSelfUpdate
+from app.schemas.doctor import DoctorAdminUpdate, DoctorRead, DoctorSelfUpdate, DoctorPublicRead
+from app.errors import NotFoundError
 from app.services.doctors import get_doctor, list_doctors, update_doctor
 
 router = APIRouter(prefix="/doctors", tags=["doctors"])
@@ -14,15 +14,14 @@ router = APIRouter(prefix="/doctors", tags=["doctors"])
 
 @router.get(
     "",
-    response_model=list[DoctorRead],
+    response_model=list[DoctorPublicRead],
     summary="List doctor profiles",
 )
 def read_doctors(
-    current_user: CurrentUser,
     db: DatabaseSession,
-) -> list[DoctorRead]:
-    doctors = list_doctors(db, current_user)
-    return [DoctorRead.model_validate(doctor) for doctor in doctors]
+) -> list[DoctorPublicRead]:
+    doctors = list_doctors(db)
+    return [DoctorPublicRead.model_validate(doctor) for doctor in doctors]
 
 
 @router.get(
@@ -48,18 +47,12 @@ def update_own_doctor_profile(
     return DoctorRead.model_validate(doctor)
 
 
-@router.get(
-    "/{doctor_id}",
-    response_model=DoctorRead,
-    summary="Get a doctor profile",
-)
-def read_doctor(
-    doctor_id: int,
-    _: CurrentUser,
-    db: DatabaseSession,
-) -> DoctorRead:
+@router.get("/{doctor_id}", response_model=DoctorPublicRead, summary="Get a public doctor profile")
+def read_doctor(doctor_id: int, db: DatabaseSession) -> DoctorPublicRead:
     doctor = get_doctor(db, doctor_id)
-    return DoctorRead.model_validate(doctor)
+    if not doctor.is_active or not doctor.user.is_active:
+        raise NotFoundError("Doctor")
+    return DoctorPublicRead.model_validate(doctor)
 
 
 @router.patch(

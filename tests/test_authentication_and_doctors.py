@@ -67,7 +67,7 @@ def test_login_rejects_incorrect_credentials(
 
 
 def test_protected_endpoint_requires_login(client: TestClient) -> None:
-    response = client.get("/api/doctors")
+    response = client.get("/api/doctors/me")
 
     assert response.status_code == 401
     assert response.headers["www-authenticate"] == "Bearer"
@@ -326,3 +326,16 @@ def test_inactive_doctor_cannot_log_in(
 
     assert deactivate_response.status_code == 200
     assert login_response.status_code == 401
+
+
+def test_admin_can_still_find_inactive_doctors(client, test_settings):
+    token, _ = login(client, "admin", configured_password(test_settings.admin_password))
+    headers = bearer_header(token)
+    doctor = client.get("/api/admin/doctors", headers=headers).json()[0]
+    assert "phone" in doctor and "user_id" in doctor
+    assert client.patch(f"/api/doctors/{doctor['id']}", headers=headers,
+                        json={"is_active": False}).status_code == 200
+    assert doctor["id"] not in {d["id"] for d in client.get("/api/doctors").json()}
+    assert client.get(f"/api/doctors/{doctor['id']}").status_code == 404
+    assert doctor["id"] in {d["id"] for d in client.get("/api/admin/doctors", headers=headers).json()}
+    assert client.get("/api/admin/doctors").status_code == 401

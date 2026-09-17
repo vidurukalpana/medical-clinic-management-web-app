@@ -27,7 +27,7 @@ class Patient(Base):
         String(20), unique=True, index=True
     )
     full_name: Mapped[str] = mapped_column(String(150), index=True)
-    date_of_birth: Mapped[date] = mapped_column(Date)
+    date_of_birth: Mapped[date | None] = mapped_column(Date, nullable=True)
     gender: Mapped[PatientGender] = mapped_column(
         Enum(PatientGender, native_enum=False, length=20, validate_strings=True)
     )

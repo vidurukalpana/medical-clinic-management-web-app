@@ -41,3 +41,11 @@ class DoctorAdminUpdate(DoctorSelfUpdate):
         if "is_active" in self.model_fields_set and self.is_active is None:
             raise ValueError("is_active cannot be null.")
         return self
+
+
+class DoctorPublicRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    display_name: str
+    registration_number: str

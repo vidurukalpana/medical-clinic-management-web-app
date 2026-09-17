@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 
 
 class UserRole(StrEnum):
+    PATIENT = "patient"
     ADMINISTRATOR = "administrator"
     DOCTOR = "doctor"
 

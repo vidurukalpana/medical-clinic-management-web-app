@@ -64,7 +64,6 @@ def make_appointment(client, doctor_id, patient_id, days=0, status="scheduled"):
 def walk_in(client, headers, doctor_id, patient_id):
     return client.post("/api/visits/walk-in", headers=headers, json={
         "doctor_id": doctor_id, "patient_id": patient_id,
-        "presenting_complaint": " Headache ",
     })
 
 
@@ -88,13 +87,12 @@ def test_check_in_consultation_and_appointment_sync(client, opd):
     assert client.patch(url, headers=headers, json={"status": "completed"}).status_code == 409
     assert client.patch(url, headers=headers, json={"status": "in_progress"}).status_code == 200
     response = client.patch(url, headers=headers, json={
-        "status": "completed", "diagnosis": "Tension headache",
-        "clinical_notes": "No neurological deficit.", "treatment_plan": "Follow-up as needed.",
+        "status": "completed",
     })
     assert response.status_code == 200
-    assert client.get(url, headers=headers).json()["diagnosis"] == "Tension headache"
+    assert "diagnosis" not in client.get(url, headers=headers).json()
     assert client.get(appointment_url, headers=headers).json()["status"] == "completed"
-    assert client.patch(url, headers=headers, json={"clinical_notes": "changed"}).status_code == 409
+    assert client.patch(url, headers=headers, json={"status": "in_progress"}).status_code == 409
 
 
 def test_queue_numbers_walk_ins_cancellation_and_daily_reset(client, opd, monkeypatch, test_settings):
@@ -103,7 +101,7 @@ def test_queue_numbers_walk_ins_cancellation_and_daily_reset(client, opd, monkey
     first = walk_in(client, headers, doctor_id, patients[0])
     assert first.status_code == 201
     assert first.json()["appointment_id"] is not None
-    assert first.json()["presenting_complaint"] == "Headache"
+    assert "presenting_complaint" not in first.json()
     assert walk_in(client, headers, doctor_id, patients[0]).status_code == 409
     appointment_id = make_appointment(client, doctor_id, patients[1])
     second = client.post(f"/api/appointments/{appointment_id}/check-in", headers=headers, json={})
@@ -173,7 +171,7 @@ def test_visit_permissions(client, opd, test_settings):
     own = walk_in(client, doctor_headers, own_id, patients[0])
     assert own.status_code == 201
     assert client.patch(f"/api/visits/{own.json()['id']}", headers=doctor_headers,
-                        json={"status": "in_progress", "diagnosis": "Headache"}).status_code == 200
+                        json={"status": "in_progress"}).status_code == 200
 
 
 def limit_slots(client, doctor_id, minutes=30):
@@ -303,3 +301,126 @@ def test_queue_uses_reserved_time_not_arrival_order(client, opd):
     assert [v["queue_number"] for v in queue] == [2, 1]
     assert datetime.fromisoformat(queue[0]["start_at"]) < datetime.fromisoformat(queue[1]["start_at"])
     assert queue[0]["end_at"] is not None
+
+
+def test_clinical_fields_are_rejected_and_other_doctor_cannot_read(client, opd, test_settings):
+    headers, doctors, patients = opd
+    doctor_headers, body = login(client, "doctor1", configured_password(test_settings.doctor_one_password))
+    other_id = next(d["id"] for d in doctors if d["id"] != body["user"]["doctor"]["id"])
+    response = walk_in(client, headers, other_id, patients[0])
+    visit = response.json()
+    for field in ("presenting_complaint", "diagnosis", "clinical_notes", "treatment_plan", "prescription"):
+        assert client.patch(f"/api/visits/{visit['id']}", headers=headers, json={field: "text"}).status_code == 422
+    assert client.get(f"/api/visits/{visit['id']}", headers=doctor_headers).status_code == 403
+    assert client.get(f"/api/doctors/{other_id}/queue", headers=doctor_headers).status_code == 403
+    assert client.get(f"/api/appointments/{visit['appointment_id']}", headers=doctor_headers).status_code == 403
+
+
+def test_dashboard_daily_counts_queues_and_quick_actions(client, opd):
+    headers, doctors, patients = opd
+    doctor_id = doctors[0]["id"]
+    booked = client.post("/api/appointments", headers=headers, json={
+        "doctor_id": doctor_id, "patient_id": patients[0],
+        "start_at": "2030-01-07T09:30:00+05:30",
+    }).json()
+    walked = walk_in(client, headers, doctor_id, patients[1]).json()
+    response = client.get("/api/dashboard", headers=headers)
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
+    dashboard = response.json()
+    assert dashboard["day"] == "2030-01-07"
+    assert dashboard["timezone"] == "Asia/Colombo"
+    assert dashboard["summary"] == {
+        "appointments": 2, "scheduled": 2, "waiting": 1, "in_progress": 0,
+        "completed": 0, "cancelled": 0, "no_show": 0,
+    }
+    assert len(dashboard["doctor_queues"]) == 2
+    queue = next(q for q in dashboard["doctor_queues"] if q["doctor_id"] == doctor_id)
+    assert queue["patients"][0]["id"] == walked["id"]
+    assert queue["patients"][0]["patient_name"] == "Second Patient"
+    appointment = next(a for a in dashboard["appointments"] if a["id"] == booked["id"])
+    check_in = next(a for a in appointment["actions"] if a["label"] == "Check in")
+    assert client.request(check_in["method"], check_in["path"], headers=headers,
+                          json=check_in["body"]).status_code == 201
+    dashboard = client.get("/api/dashboard", headers=headers).json()
+    queue = next(q for q in dashboard["doctor_queues"] if q["doctor_id"] == doctor_id)
+    assert [v["patient_name"] for v in queue["patients"]] == ["Second Patient", "First Patient"]
+    assert dashboard["summary"]["waiting"] == 2
+    assert all(not a["actions"] for a in dashboard["appointments"])
+    start = queue["patients"][0]["actions"][0]
+    assert client.request(start["method"], start["path"], headers=headers, json=start["body"]).status_code == 200
+    dashboard = client.get("/api/dashboard", headers=headers).json()
+    assert dashboard["summary"]["waiting"] == 1
+    assert dashboard["summary"]["in_progress"] == 1
+    queue = next(q for q in dashboard["doctor_queues"] if q["doctor_id"] == doctor_id)
+    complete = queue["patients"][0]["actions"][0]
+    assert complete["label"] == "Complete"
+    assert client.request(complete["method"], complete["path"], headers=headers, json=complete["body"]).status_code == 200
+    dashboard = client.get("/api/dashboard", headers=headers).json()
+    assert dashboard["summary"]["completed"] == 1
+    assert dashboard["summary"]["in_progress"] == 0
+    assert sum(len(q["patients"]) for q in dashboard["doctor_queues"]) == 1
+    assert "phone" not in response.text
+    assert "guest_token_hash" not in response.text
+    assert "diagnosis" not in response.text
+
+
+def test_dashboard_authorization_and_doctor_filter(client, opd, test_settings):
+    headers, doctors, patients = opd
+    doctor_headers, body = login(client, "doctor1", configured_password(test_settings.doctor_one_password))
+    own_id = body["user"]["doctor"]["id"]
+    other_id = next(d["id"] for d in doctors if d["id"] != own_id)
+    walk_in(client, headers, own_id, patients[0])
+    walk_in(client, headers, other_id, patients[1])
+    assert client.get("/api/dashboard").status_code == 401
+    own = client.get("/api/dashboard", headers=doctor_headers).json()
+    assert [q["doctor_id"] for q in own["doctor_queues"]] == [own_id]
+    assert {a["doctor_id"] for a in own["appointments"]} == {own_id}
+    assert own["summary"]["waiting"] == 1
+    assert "Second Patient" not in str(own)
+    assert client.get(f"/api/dashboard?doctor_id={other_id}", headers=doctor_headers).status_code == 403
+    filtered = client.get(f"/api/dashboard?doctor_id={other_id}", headers=headers).json()
+    assert filtered["summary"]["appointments"] == 1
+    assert [q["doctor_id"] for q in filtered["doctor_queues"]] == [other_id]
+    assert client.get("/api/dashboard?doctor_id=99999", headers=headers).status_code == 404
+    assert client.get("/api/dashboard?doctor_id=0", headers=headers).status_code == 422
+    credentials = {"username": "dashboard_patient", "password": "PatientPassword123!"}
+    assert client.post("/api/auth/register-patient", json=credentials).status_code == 201
+    patient_token = client.post("/api/auth/login", json=credentials).json()["access_token"]
+    assert client.get("/api/dashboard", headers={"Authorization": "Bearer " + patient_token}).status_code == 403
+
+
+def test_dashboard_uses_clinic_midnight_and_excludes_terminal_visits(client, opd):
+    headers, doctors, patients = opd
+    dependency = client.app.dependency_overrides[get_db]()
+    db = next(dependency)
+    try:
+        for value, status in (("2030-01-06T18:29:00+00:00", "scheduled"),
+                              ("2030-01-06T18:30:00+00:00", "cancelled"),
+                              ("2030-01-07T18:29:00+00:00", "no_show"),
+                              ("2030-01-07T18:30:00+00:00", "scheduled")):
+            start = datetime.fromisoformat(value)
+            db.add(Appointment(doctor_id=doctors[0]["id"], patient_id=patients[0],
+                               start_at=start, end_at=start + timedelta(minutes=1), status=status))
+        db.commit()
+    finally:
+        dependency.close()
+    dashboard = client.get("/api/dashboard", headers=headers).json()
+    assert dashboard["summary"]["appointments"] == 2
+    assert dashboard["summary"]["cancelled"] == 1
+    assert dashboard["summary"]["no_show"] == 1
+    assert dashboard["summary"]["scheduled"] == 0
+    assert all(not a["actions"] for a in dashboard["appointments"])
+    assert all(not q["patients"] for q in dashboard["doctor_queues"])
+
+
+def test_dashboard_empty_day_and_inactive_doctor(client, opd):
+    headers, doctors, _ = opd
+    assert client.patch(f"/api/doctors/{doctors[0]['id']}", headers=headers,
+                        json={"is_active": False}).status_code == 200
+    dashboard = client.get("/api/dashboard", headers=headers).json()
+    assert all(value == 0 for value in dashboard["summary"].values())
+    assert dashboard["appointments"] == []
+    inactive = next(q for q in dashboard["doctor_queues"] if q["doctor_id"] == doctors[0]["id"])
+    assert inactive["is_active"] is False
+    assert inactive["patients"] == []

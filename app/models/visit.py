@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from sqlalchemy import CheckConstraint, Date, ForeignKey, Index, String, Text, UniqueConstraint, text
+from sqlalchemy import CheckConstraint, Date, ForeignKey, Index, String, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.appointment import Appointment
@@ -32,10 +32,6 @@ class Visit(Base):
     visit_date: Mapped[date] = mapped_column(Date)
     queue_number: Mapped[int]
     status: Mapped[str] = mapped_column(String(20), default="waiting")
-    presenting_complaint: Mapped[str | None] = mapped_column(Text)
-    diagnosis: Mapped[str | None] = mapped_column(Text)
-    clinical_notes: Mapped[str | None] = mapped_column(Text)
-    treatment_plan: Mapped[str | None] = mapped_column(Text)
 
     appointment: Mapped[Appointment | None] = relationship()
 

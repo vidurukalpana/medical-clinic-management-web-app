@@ -6,7 +6,7 @@ from app.models.patient import Patient, patient_record_number_sequence
 from app.schemas.patient import PatientCreate, PatientUpdate
 
 
-def create_patient(db: Session, patient_data: PatientCreate) -> Patient:
+def create_patient(db: Session, patient_data: PatientCreate, *, commit: bool = True) -> Patient:
     next_record_number = db.scalar(
         select(patient_record_number_sequence.next_value())
     )
@@ -18,8 +18,11 @@ def create_patient(db: Session, patient_data: PatientCreate) -> Patient:
         **patient_data.model_dump(),
     )
     db.add(patient)
-    db.commit()
-    db.refresh(patient)
+    if commit:
+        db.commit()
+        db.refresh(patient)
+    else:
+        db.flush()
     return patient
 
 

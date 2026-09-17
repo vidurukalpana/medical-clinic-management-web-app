@@ -25,5 +25,6 @@ class Appointment(Base):
     patient_id: Mapped[int] = mapped_column(ForeignKey("patients.id"), index=True)
     start_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     end_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    booked_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    guest_token_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="scheduled")

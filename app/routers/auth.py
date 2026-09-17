@@ -2,8 +2,16 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Response, status
 
+from sqlalchemy.exc import IntegrityError
+
+from app.models import User, UserRole
+from app.errors import ConflictError
+from app.schemas.auth import PatientRegistration
+from app.services.auth import normalize_username
+from app.services.security import hash_password
+
 from app.core.config import Settings, get_settings
-from app.dependencies import CurrentAuthSession, CurrentUser, DatabaseSession
+from app.dependencies import CurrentAuthSession, AuthenticatedUser, DatabaseSession
 from app.schemas.auth import (
     AuthenticatedUserRead,
     LoginRequest,
@@ -63,7 +71,7 @@ def logout(
     response_model=AuthenticatedUserRead,
     summary="Get the currently logged-in user",
 )
-def read_current_user(current_user: CurrentUser) -> AuthenticatedUserRead:
+def read_current_user(current_user: AuthenticatedUser) -> AuthenticatedUserRead:
     return AuthenticatedUserRead.model_validate(current_user)
 
 
@@ -75,7 +83,7 @@ def read_current_user(current_user: CurrentUser) -> AuthenticatedUserRead:
 )
 def change_password(
     request: PasswordChangeRequest,
-    current_user: CurrentUser,
+    current_user: AuthenticatedUser,
     db: DatabaseSession,
 ) -> Response:
     change_user_password(
@@ -85,3 +93,16 @@ def change_password(
         request.new_password,
     )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/register-patient", response_model=AuthenticatedUserRead, status_code=201)
+def register_patient_account(data: PatientRegistration, db: DatabaseSession) -> AuthenticatedUserRead:
+    user = User(username=normalize_username(data.username),
+                password_hash=hash_password(data.password), role=UserRole.PATIENT)
+    db.add(user)
+    try:
+        db.commit()
+    except IntegrityError as error:
+        db.rollback()
+        raise ConflictError("Username is unavailable.") from error
+    return AuthenticatedUserRead.model_validate(user)
