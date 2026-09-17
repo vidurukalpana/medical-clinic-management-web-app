@@ -15,7 +15,7 @@ from app.models import (
     UserRole,
 )
 from app.services.auth import get_active_auth_session
-from app.services.doctor_scheduling import get_availability, get_unavailability
+from app.services.doctor_scheduling import get_availability, get_unavailability, lock_schedule
 from app.services.doctors import get_doctor
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -95,12 +95,13 @@ ScheduleDoctor = Annotated[Doctor, Depends(get_schedule_doctor)]
 def require_schedule_manager(
     doctor: ScheduleDoctor,
     current_user: CurrentUser,
+    db: DatabaseSession,
 ) -> Doctor:
-    if current_user.role == UserRole.ADMINISTRATOR:
-        return doctor
-    if current_user.role == UserRole.DOCTOR and doctor.user_id == current_user.id:
-        return doctor
-    raise ForbiddenError("You can manage only your own schedule.")
+    if current_user.role != UserRole.ADMINISTRATOR and doctor.user_id != current_user.id:
+        raise ForbiddenError("You can manage only your own schedule.")
+    # Lock before loading child rows so concurrent deletion returns 404, not a stale object.
+    lock_schedule(db, doctor.id)
+    return doctor
 
 
 ScheduleManagerDoctor = Annotated[Doctor, Depends(require_schedule_manager)]

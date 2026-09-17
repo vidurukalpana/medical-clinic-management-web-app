@@ -1,6 +1,6 @@
 from datetime import date, datetime, timedelta, timezone
 from secrets import compare_digest
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Header, Query, Response, status
 from sqlalchemy import select
@@ -11,7 +11,7 @@ from app.errors import AuthenticationRequiredError, ForbiddenError
 from app.errors.appointments import save_appointment
 from app.models import Appointment, Doctor, User, UserRole
 from app.schemas.appointment import (
-    AppointmentCreate, AppointmentRead, AppointmentReschedule, AvailableSlot, BookingStatus,
+    AppointmentPage, AppointmentCreate, AppointmentRead, AppointmentReschedule, AvailableSlot, BookingStatus,
     GuestBookingConfirmation, GuestBookingCreate, GuestBookingRead,
 )
 from app.schemas.patient import PatientCreate
@@ -59,6 +59,31 @@ def add_appointment(
     doctor = appointments.get_booking_doctor(db, data.doctor_id, lock=True)
     require_booking_manager(doctor, user)
     appointment = appointments.create_appointment(db, doctor, data, settings.timezone)
+    appointment.booked_by_user_id = user.id
+    save_appointment(db)
+    return AppointmentRead.model_validate(appointment)
+
+
+@router.get("/appointments", response_model=AppointmentPage)
+def browse_appointments(
+    user: CurrentUser, db: DatabaseSession, settings: AppSettings, response: Response,
+    doctor_id: Annotated[int | None, Query(gt=0)] = None,
+    patient_id: Annotated[int | None, Query(gt=0)] = None,
+    date_from: date | None = None, date_to: date | None = None,
+    status: Literal["scheduled", "completed", "cancelled", "no_show"] | None = None,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> AppointmentPage:
+    response.headers["Cache-Control"] = "no-store"
+    return appointments.list_appointments(
+        db, user, settings.timezone, doctor_id=doctor_id, patient_id=patient_id,
+        date_from=date_from, date_to=date_to, status=status, offset=offset, limit=limit,
+    )
+
+
+@router.put("/appointments/{appointment_id}/no-show", response_model=AppointmentRead)
+def mark_appointment_no_show(managed: ManagedAppointment, db: DatabaseSession) -> AppointmentRead:
+    appointment = appointments.mark_no_show(db, managed[1])
     save_appointment(db)
     return AppointmentRead.model_validate(appointment)
 

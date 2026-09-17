@@ -2,8 +2,8 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.errors import DuplicateRegistrationNumberError, NotFoundError
-from app.models import Doctor, User
+from app.errors import ConflictError, DuplicateRegistrationNumberError, NotFoundError
+from app.models import Doctor, User, UserRole
 from app.schemas.doctor import DoctorAdminUpdate, DoctorSelfUpdate
 
 
@@ -26,6 +26,11 @@ def update_doctor(
     doctor: Doctor,
     update: DoctorSelfUpdate | DoctorAdminUpdate,
 ) -> Doctor:
+    db.execute(select(Doctor.id).where(Doctor.id == doctor.id).with_for_update())
+    db.refresh(doctor)
+    db.refresh(doctor.user)
+    if getattr(update, "is_active", None) is True and doctor.user.role != UserRole.DOCTOR:
+        raise ConflictError("Assign the doctor account role before activating its profile.")
     for field_name, value in update.model_dump(exclude_unset=True).items():
         setattr(doctor, field_name, value)
 

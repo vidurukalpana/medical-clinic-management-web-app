@@ -159,6 +159,9 @@ def dashboard(
         if appointment.status == "scheduled" and visit_id is None:
             actions.append(DashboardAction(label="Check in", method="POST",
                                            path=f"/api/appointments/{appointment.id}/check-in"))
+            if appointment.end_at <= now:
+                actions.append(DashboardAction(label="Mark no-show", method="PUT",
+                                               path=f"/api/appointments/{appointment.id}/no-show"))
             actions.append(DashboardAction(label="Cancel", method="PUT",
                                            path=f"/api/appointments/{appointment.id}/cancel"))
         appointment_items.append(DashboardAppointment(

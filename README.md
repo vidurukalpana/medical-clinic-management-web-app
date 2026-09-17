@@ -352,3 +352,18 @@ erDiagram
     }
 
 ```
+
+## Staff workflow APIs
+
+All routes below require a staff bearer token. Doctors can browse and update only their own appointments; account administration requires an administrator.
+
+- `GET /api/appointments`: paginated staff appointment search. Optional filters are `doctor_id`, `patient_id`, `status`, `date_from`, and `date_to`. Dates are inclusive clinic-local dates applied to appointment start times. `offset` defaults to 0; `limit` defaults to 20 and is capped at 100. The response contains `items`, `total`, `offset`, and `limit`, ordered by start time and ID. Without a doctor filter, administrators see all doctors and doctors see only themselves.
+- `PUT /api/appointments/{appointment_id}/no-show`: marks an unchecked-in, scheduled appointment as `no_show` after its end time. Repeating the operation is safe. Checked-in, cancelled, or completed appointments return 409. Today's dashboard offers this action for eligible appointments.
+- `POST /api/admin/users`: creates a patient, doctor, or administrator account. Supply `username`, `password` (12–128 characters), `role`, and optionally `is_active` (default true). Doctor accounts additionally require `doctor: {"display_name": "Doctor Three", "registration_number": "DOC-003", "phone": "0771234567"}`; phone is optional. Usernames and registration numbers must be unique.
+- `GET /api/admin/users`: lists accounts with optional `role` and `is_active` filters and the same pagination defaults and response envelope as appointment search. Password hashes and session tokens are never returned.
+- `GET /api/admin/users/{user_id}`: reads an account and its optional doctor profile.
+- `PATCH /api/admin/users/{user_id}`: changes `role` and/or `is_active`. Assigning the doctor role to an account without a profile requires the nested `doctor` object described above. Existing profiles are retained for appointment/visit history, disabled when the account leaves the doctor role, and reactivated when it returns. Edit existing profile details through the doctor endpoints. Role/activity changes revoke existing sessions; reactivation requires a fresh login. The last active administrator cannot be demoted or disabled, including through concurrent requests. Startup seeding preserves account administration changes.
+
+Schedule edits now reject conflicts with HTTP 409. Removing, disabling, moving, or shortening a weekly period cannot strand an ongoing or future scheduled booking previously covered by it. Adding or moving an unavailable period cannot overlap such bookings. Resolve the bookings first through rescheduling, cancellation, or visit management. Changing slot duration keeps existing reservation times when they still fit within working hours. Schedule mutations share the doctor's booking lock, so a concurrent booking and conflicting schedule edit cannot both succeed. Historical and terminal bookings do not prevent schedule edits.
+
+These additions use the existing database schema and need no database migration.

@@ -54,3 +54,10 @@ class GuestBookingRead(AvailableSlot):
 
 class GuestBookingConfirmation(GuestBookingRead):
     management_token: str
+
+
+class AppointmentPage(BaseModel):
+    items: list[AppointmentRead]
+    total: int
+    offset: int
+    limit: int
