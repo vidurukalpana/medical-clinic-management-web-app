@@ -278,3 +278,64 @@ def test_existing_schema_upgrade_is_repeatable_and_purge_is_explicit(client):
         }
     finally:
         dependency.close()
+
+
+def test_schema_upgrade_converts_legacy_unavailability_dates_and_patient_sex(client, test_settings):
+    from sqlalchemy import inspect, text
+    from app.db.session import get_db
+    from app.db.initialize import upgrade_booking_schema
+
+    dependency = client.app.dependency_overrides[get_db]()
+    db = next(dependency)
+    try:
+        engine = db.get_bind()
+        # Recreate the pre-period schema: one whole-day date per row and a required `sex` column.
+        with engine.begin() as connection:
+            connection.execute(text(
+                "ALTER TABLE doctor_unavailability DROP CONSTRAINT ck_doctor_unavailability_time_order, "
+                "DROP COLUMN start_at, DROP COLUMN end_at, ADD COLUMN unavailable_date DATE NOT NULL, "
+                "ADD COLUMN created_at TIMESTAMP NOT NULL, ADD COLUMN updated_at TIMESTAMP NOT NULL, "
+                "ADD CONSTRAINT uq_doctor_unavailability_doctor_date UNIQUE (doctor_id, unavailable_date)"
+            ))
+            connection.execute(text(
+                "INSERT INTO doctor_unavailability (doctor_id, unavailable_date, reason, created_at, updated_at) "
+                "VALUES (1, '2030-01-07', 'Leave', now(), now())"
+            ))
+            connection.execute(text("ALTER TABLE patients DROP COLUMN gender, ADD COLUMN sex VARCHAR(20) NOT NULL"))
+            connection.execute(text(
+                "INSERT INTO patients (medical_record_number, full_name, phone, sex, created_at, updated_at) "
+                "VALUES ('MRN-LEGACY', 'Legacy Patient', '0771234567', 'F', now(), now())"
+            ))
+        upgrade_booking_schema(engine, timezone="Asia/Colombo")
+        upgrade_booking_schema(engine, timezone="Asia/Colombo")
+
+        with engine.connect() as connection:
+            start_at, end_at = connection.execute(text(
+                "SELECT start_at, end_at FROM doctor_unavailability WHERE reason = 'Leave'"
+            )).one()
+            gender = connection.execute(text(
+                "SELECT gender FROM patients WHERE medical_record_number = 'MRN-LEGACY'"
+            )).scalar_one()
+        colombo = ZoneInfo("Asia/Colombo")
+        assert start_at == datetime(2030, 1, 7, tzinfo=colombo)
+        assert end_at == datetime(2030, 1, 8, tzinfo=colombo)
+        assert gender == "FEMALE"
+        assert {"start_at", "end_at"} <= {c["name"] for c in inspect(engine).get_columns("doctor_unavailability")}
+    finally:
+        dependency.close()
+
+    # The upgraded tables accept writes from the current models.
+    headers, _ = login(client, "admin", configured_password(test_settings.admin_password))
+    blocked = client.post("/api/doctors/1/unavailability", headers=headers, json={
+        "start_at": "2030-01-08T09:00:00+05:30", "end_at": "2030-01-08T12:00:00+05:30",
+    })
+    assert blocked.status_code == 201
+    periods = client.get("/api/doctors/1/unavailability", headers=headers).json()
+    assert [(datetime.fromisoformat(p["start_at"]), p["reason"]) for p in periods] == [
+        (datetime(2030, 1, 7, tzinfo=ZoneInfo("Asia/Colombo")), "Leave"),
+        (datetime(2030, 1, 8, 9, tzinfo=ZoneInfo("Asia/Colombo")), None),
+    ]
+    patient = client.post("/api/patients", headers=headers, json={"full_name": "New Patient", "phone": "0777654321"})
+    assert patient.status_code == 201
+    legacy = client.get("/api/patients", headers=headers, params={"query": "MRN-LEGACY"}).json()["items"]
+    assert legacy[0]["gender"] == "female"
