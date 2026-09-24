@@ -1,6 +1,6 @@
 # Medical Clinic Booking and Queue API
 
-A FastAPI backend for public appointment booking and staff-managed clinic queues. Patients can book without creating an account. Optional patient accounts provide access to bookings made while signed in. The repository provides APIs and interactive `/docs`, with no application UI. Public patient booking and the staff dashboard are available through the API.
+A FastAPI backend for public appointment booking and staff-managed clinic queues. Patients can book without creating an account. Optional patient accounts provide access to bookings made while signed in. The repository provides APIs and interactive `/docs`, plus a React web app in [`frontend/`](frontend/README.md) for public booking and the staff portal.
 
 ## Scope and privacy
 
@@ -90,6 +90,10 @@ Open these addresses in a web browser:
 - Health check: http://127.0.0.1:8000/api/health
 
 Press `Control+C` in Terminal to stop the application.
+
+### 7. Start the web app (optional)
+
+With the backend running, open a second Terminal in the `frontend` folder and run `npm install` and then `npm run dev`. Then open http://localhost:5173. See [frontend/README.md](frontend/README.md) for details.
 
 ### Run with PyCharm
 
