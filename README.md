@@ -256,7 +256,7 @@ New installations create the revised schema automatically. Existing installation
 python -m app.db.initialize
 ```
 
-This adds guest-token/account ownership columns and makes birth date optional. It preserves existing rows and does not delete legacy clinical data.
+This adds guest-token/account ownership columns and makes birth date optional. It also moves older schemas to the current columns: each legacy `doctor_unavailability.unavailable_date` becomes a whole clinic-local day in `start_at`/`end_at`, and the legacy patient `sex` column is copied into `gender`. The command is safe to run repeatedly. It preserves existing rows, keeps the legacy columns (no longer required), and does not delete legacy clinical data.
 
 To permanently remove the old clinical columns and their contents after the clinic has authorized their deletion, run:
 
