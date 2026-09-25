@@ -10,7 +10,7 @@ A React + TypeScript single-page app for the Medical Clinic Booking and Queue AP
 - [Vite](https://vitejs.dev/) + React 18 + TypeScript
 - React Router for routing
 - TanStack Query for data fetching, caching and the dashboard's 20-second live refresh
-- lucide-react icons and a hand-written CSS design system (`src/styles.css`) with automatic light and dark themes
+- lucide-react icons and a hand-written CSS design system (`src/styles.css`). The public site is always light; the staff portal has a Light / Dark / System switch in the sidebar, remembered per device
 
 ## Run locally
 
