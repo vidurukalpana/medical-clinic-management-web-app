@@ -12,8 +12,12 @@ import {
   Menu,
   X,
   CalendarPlus,
+  Sun,
+  Moon,
+  Monitor,
 } from "lucide-react";
 import { useAuth } from "../lib/auth";
+import { useStaffTheme, type ThemePreference } from "../lib/theme";
 import { Avatar, Spinner } from "./ui";
 
 export function Brand({ to = "/" }: { to?: string }) {
@@ -96,6 +100,32 @@ const ADMIN_NAV = [
   { to: "/staff/users", label: "Accounts", icon: ShieldCheck },
 ];
 
+const THEME_OPTIONS: { value: ThemePreference; label: string; icon: typeof Sun }[] = [
+  { value: "light", label: "Light", icon: Sun },
+  { value: "dark", label: "Dark", icon: Moon },
+  { value: "system", label: "System", icon: Monitor },
+];
+
+function ThemeSwitch() {
+  const [theme, setTheme] = useStaffTheme();
+  return (
+    <div className="segmented theme-switch" role="radiogroup" aria-label="Theme">
+      {THEME_OPTIONS.map(({ value, label, icon: Icon }) => (
+        <button
+          key={value}
+          type="button"
+          role="radio"
+          aria-checked={theme === value}
+          className={theme === value ? "is-selected" : ""}
+          onClick={() => setTheme(value)}
+        >
+          <Icon size={14} /> {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function StaffLayout() {
   const { user, loading, isStaff, isAdmin, logout } = useAuth();
   const navigate = useNavigate();
@@ -135,6 +165,7 @@ export function StaffLayout() {
             ))}
         </nav>
         <div className="sidebar-foot">
+          <ThemeSwitch />
           <NavLink to="/staff/account" className="sidebar-user">
             <Avatar name={name} size={36} />
             <span>
