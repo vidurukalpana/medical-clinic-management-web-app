@@ -9,6 +9,7 @@ A FastAPI backend for public appointment booking and staff-managed clinic queues
 - Private booking management using a random token; only its SHA-256 hash is stored.
 - Optional patient registration and login; patient accounts never grant staff access.
 - Staff login for patient registration, schedules, check-in, walk-ins and queue management.
+- A public chat assistant that answers questions about the clinic, doctors' hours and booking. It cannot book or change appointments and never sees patient records.
 - Doctors can access only their own appointments and queues; administrators can manage either doctor.
 - No prescription, diagnosis, symptom, consultation-note or treatment-plan fields in the booking/queue API or new database schema. Unknown clinical fields are rejected.
 
@@ -21,6 +22,7 @@ Guest bookings create a minimal patient record with no required birth date, gend
 - Python and FastAPI
 - SQLAlchemy for database access
 - PostgreSQL with the Psycopg driver
+- [Ollama](https://ollama.com/) running the `llama3.2:1b` model for the chat assistant (optional)
 
 A cloud deployment can be introduced later if the clinic needs to support remote access.
 
@@ -91,7 +93,17 @@ Open these addresses in a web browser:
 
 Press `Control+C` in Terminal to stop the application.
 
-### 7. Start the web app (optional)
+### 7. Start the chat assistant model (optional)
+
+The website chat assistant uses a local [Ollama](https://ollama.com/) model. Install Ollama, then download the model:
+
+```bash
+ollama pull llama3.2:1b
+```
+
+The Ollama desktop app keeps the server running at `http://127.0.0.1:11434`; otherwise run `ollama serve`. The rest of the application works without Ollama. Only chat questions fail, with HTTP 503.
+
+### 8. Start the web app (optional)
 
 With the backend running, open a second Terminal in the `frontend` folder and run `npm install` and then `npm run dev`. Then open http://localhost:5173. See [frontend/README.md](frontend/README.md) for details.
 
@@ -107,7 +119,7 @@ Confirm that PostgreSQL is running, then run:
 pytest
 ```
 
-Tests use `CLINIC_DATABASE_URL` and create a uniquely named temporary PostgreSQL schema. Only that temporary schema is removed after each test; the application's normal tables and clinic data are not changed.
+Tests use `CLINIC_DATABASE_URL` and create a uniquely named temporary PostgreSQL schema. Only that temporary schema is removed after each test; the application's normal tables and clinic data are not changed. Chatbot tests replace the language model with a fake, so Ollama doesn't need to be running.
 
 ## Authentication and doctor accounts
 
@@ -221,6 +233,60 @@ Send the token in the `X-Booking-Token` header for:
 - `PUT /api/guest/appointments/{appointment_id}/reschedule` with `{"start_at": "...timezone-aware datetime..."}`
 
 Tokens are scoped to a single booking and expire 24 hours after its current end time. They cannot retrieve patient records or other bookings. Lost tokens require staff assistance; the API does not recover them using an unverified phone number.
+
+## Clinic contact details
+
+`GET /api/clinic-contact-details` needs no login. It returns the clinic's public contact details, which the website footer displays:
+
+```json
+{
+  "name": "CareFlow Clinic",
+  "address_lines": ["No. 42, Lake View Road", "Colombo 05, Sri Lanka"],
+  "phone": "+94 11 234 5678",
+  "whatsapp": "+94 77 123 4567",
+  "email": "hello@careflowclinic.lk",
+  "reception_hours": "Monday to Friday, 8:00 to 18:00",
+  "closed_days": "Closed on weekends and public holidays",
+  "emergency_number": "1990"
+}
+```
+
+The details are stored in [`app/content/clinic_contact.json`](app/content/clinic_contact.json), the single source for both the website and the chat assistant. The values shipped with the project are **mock details**. `whatsapp`, `email`, `closed_days` and `emergency_number` are optional (`null` or left out), and unknown fields are rejected. The file is read on each request, so edits apply without a restart.
+
+## Website chat assistant
+
+The public site has an **Ask a question** button that opens a chat assistant. It only answers questions. It cannot book, cancel or reschedule appointments, and it points people to the **Book a visit** and **Manage booking** pages instead.
+
+`POST /api/chatbot/messages` needs no login. Send the conversation so far, ending with the user's question:
+
+```json
+{
+  "messages": [
+    {"role": "user", "content": "When does Doctor One see patients?"}
+  ]
+}
+```
+
+The response is `{"reply": "..."}` with `Cache-Control: no-store`. Each message can be up to 1,000 characters, and a request can hold up to 20 messages. Only `user` and `assistant` roles are accepted, and unknown fields are rejected. If the model can't be reached, the API returns 503.
+
+What the assistant knows:
+
+- The clinic's contact details and reception hours from [`app/content/clinic_contact.json`](app/content/clinic_contact.json). The website footer shows the same details (see [Clinic contact details](#clinic-contact-details)).
+- The text in [`app/content/clinic_info.md`](app/content/clinic_info.md): directions, fees, services, facilities and how booking works. **The details in both content files are mock details for development.** Replace them with the clinic's real information before going live. Changes apply to the next question without a restart.
+- Active doctors' names, their weekly consultation hours, and their unavailable periods over the next 14 days. These are read from the database for every question. Unavailability reasons and registration numbers are left out.
+- Today's date in `CLINIC_TIMEZONE`.
+
+It never sees patient records, appointments, queues or booking codes. Conversations are not stored on the server; the browser keeps them only until the page is closed. The model is told to refuse medical advice and to direct emergencies to emergency services. A small model can still make mistakes, so the chat window says that answers may be wrong.
+
+Configure the model in `.env`:
+
+| Setting | Default | Purpose |
+| --- | --- | --- |
+| `CLINIC_CHATBOT_BASE_URL` | `http://127.0.0.1:11434` | Ollama server address |
+| `CLINIC_CHATBOT_MODEL` | `llama3.2:1b` | Ollama model name |
+| `CLINIC_CHATBOT_TIMEOUT_SECONDS` | `60` | Maximum time to wait for an answer |
+
+Before a public deployment, add rate limiting for this endpoint, because every question uses model compute.
 
 ## Optional patient accounts
 

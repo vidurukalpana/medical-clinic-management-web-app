@@ -19,6 +19,8 @@ import {
 import { useAuth } from "../lib/auth";
 import { useStaffTheme, type ThemePreference } from "../lib/theme";
 import { Avatar, Spinner } from "./ui";
+import { ChatWidget } from "./ChatWidget";
+import { SiteFooter } from "./SiteFooter";
 
 export function Brand({ to = "/" }: { to?: string }) {
   return (
@@ -76,15 +78,8 @@ export function PublicLayout() {
       <main>
         <Outlet />
       </main>
-      <footer className="site-footer">
-        <div className="container footer-inner">
-          <Brand />
-          <p className="muted">
-            Booking only needs a name and phone number. We never ask for symptoms or medical details online.
-          </p>
-          <span className="muted">© {new Date().getFullYear()} CareFlow Clinic</span>
-        </div>
-      </footer>
+      <SiteFooter />
+      <ChatWidget />
     </div>
   );
 }

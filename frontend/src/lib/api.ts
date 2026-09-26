@@ -150,6 +150,20 @@ export interface Unavailability {
   reason: string | null;
 }
 export type UnavailabilityInput = Omit<Unavailability, "id" | "doctor_id">;
+export interface ClinicContactDetails {
+  name: string;
+  address_lines: string[];
+  phone: string;
+  whatsapp: string | null;
+  email: string | null;
+  reception_hours: string;
+  closed_days: string | null;
+  emergency_number: string | null;
+}
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
 export interface DoctorProfileInput {
   display_name: string;
   registration_number: string;
@@ -293,6 +307,13 @@ export const api = {
       headers: { "X-Booking-Token": token },
       auth: false,
     }),
+
+  // Clinic
+  clinicContactDetails: () => request<ClinicContactDetails>("/clinic-contact-details", { auth: false }),
+
+  // Public chat assistant (answers questions only)
+  askChatbot: (messages: ChatMessage[]) =>
+    request<{ reply: string }>("/chatbot/messages", { method: "POST", body: { messages }, auth: false }),
 
   // Patient account
   myAppointments: () => request<GuestBooking[]>("/my/appointments"),

@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     doctor_two_username: str = "doctor2"
     doctor_two_password: SecretStr | None = None
 
+    chatbot_base_url: str = "http://127.0.0.1:11434"
+    chatbot_model: str = "llama3.2:1b"
+    chatbot_timeout_seconds: float = Field(default=60, gt=0, le=300)
+
     @field_validator("database_url")
     @classmethod
     def require_postgresql(cls, value: str) -> str:
