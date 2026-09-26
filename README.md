@@ -234,6 +234,25 @@ Send the token in the `X-Booking-Token` header for:
 
 Tokens are scoped to a single booking and expire 24 hours after its current end time. They cannot retrieve patient records or other bookings. Lost tokens require staff assistance; the API does not recover them using an unverified phone number.
 
+## Clinic contact details
+
+`GET /api/clinic-contact-details` needs no login. It returns the clinic's public contact details, which the website footer displays:
+
+```json
+{
+  "name": "CareFlow Clinic",
+  "address_lines": ["No. 42, Lake View Road", "Colombo 05, Sri Lanka"],
+  "phone": "+94 11 234 5678",
+  "whatsapp": "+94 77 123 4567",
+  "email": "hello@careflowclinic.lk",
+  "reception_hours": "Monday to Friday, 8:00 to 18:00",
+  "closed_days": "Closed on weekends and public holidays",
+  "emergency_number": "1990"
+}
+```
+
+The details are stored in [`app/content/clinic_contact.json`](app/content/clinic_contact.json), the single source for both the website and the chat assistant. The values shipped with the project are **mock details**. `whatsapp`, `email`, `closed_days` and `emergency_number` are optional (`null` or left out), and unknown fields are rejected. The file is read on each request, so edits apply without a restart.
+
 ## Website chat assistant
 
 The public site has an **Ask a question** button that opens a chat assistant. It only answers questions. It cannot book, cancel or reschedule appointments, and it points people to the **Book a visit** and **Manage booking** pages instead.
@@ -252,7 +271,8 @@ The response is `{"reply": "..."}` with `Cache-Control: no-store`. Each message 
 
 What the assistant knows:
 
-- The text in [`app/content/clinic_info.md`](app/content/clinic_info.md): contact details, opening hours, fees, services, facilities and how booking works. **The address, phone numbers, email, fees and facilities in this file are mock details for development.** Replace them with the clinic's real information before going live. Changes apply to the next question without a restart. The website footer shows the same contact details from `frontend/src/lib/clinic.ts`, so update both files together.
+- The clinic's contact details and reception hours from [`app/content/clinic_contact.json`](app/content/clinic_contact.json). The website footer shows the same details (see [Clinic contact details](#clinic-contact-details)).
+- The text in [`app/content/clinic_info.md`](app/content/clinic_info.md): directions, fees, services, facilities and how booking works. **The details in both content files are mock details for development.** Replace them with the clinic's real information before going live. Changes apply to the next question without a restart.
 - Active doctors' names, their weekly consultation hours, and their unavailable periods over the next 14 days. These are read from the database for every question. Unavailability reasons and registration numbers are left out.
 - Today's date in `CLINIC_TIMEZONE`.
 

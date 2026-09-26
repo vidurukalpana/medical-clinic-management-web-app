@@ -37,7 +37,7 @@ In production, serve `dist/` from the same origin as the API, or put both behind
 
 ## Clinic contact details
 
-The public site's footer shows the clinic's address, phone, WhatsApp, email, reception hours and emergency number from `src/lib/clinic.ts`. These are **mock details** for development. The backend chat assistant reads the same details from `app/content/clinic_info.md`, so update both files together.
+The public site's footer (`src/components/SiteFooter.tsx`) shows the clinic's address, phone, WhatsApp, email, reception hours and emergency number. It loads them from `GET /api/clinic-contact-details`, the same source the chat assistant uses. To change them, edit `app/content/clinic_contact.json` in the backend. The shipped values are **mock details** for development.
 
 ## Sign-in
 
@@ -47,8 +47,8 @@ Use the accounts seeded by the backend (`admin`, `doctor1`, `doctor2`) with the 
 
 ```
 src/
-  lib/          API client + types (api.ts), clinic contact details (clinic.ts), auth context, clinic-timezone helpers, hooks
-  components/   UI primitives, layouts, chat widget, slot picker, patient picker, toasts
+  lib/          API client + types (api.ts), auth context, clinic-timezone helpers, hooks
+  components/   UI primitives, layouts, site footer, chat widget, slot picker, patient picker, toasts
   pages/public/ Home, booking wizard, manage booking, sign-in/registration, My bookings
   pages/staff/  Dashboard, appointments, patients, schedule, admin pages, account
 ```

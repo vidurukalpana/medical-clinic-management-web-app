@@ -8,8 +8,10 @@ from pydantic import SecretStr
 from app.core.config import Settings
 from app.routers.chatbot import get_chat_model
 from app.schemas.chatbot import ChatMessage
+from app.schemas.clinic import ClinicContact
 from app.services import chatbot
 from app.services.chatbot import OllamaChatModel
+from app.services.clinic import load_clinic_contact
 
 
 class FakeChatModel:
@@ -92,6 +94,9 @@ def test_chatbot_answers_with_public_clinic_context(
     assert doctor["display_name"] in prompt
     assert "Monday: 09:00 to 13:00" in prompt
     assert prompt.index("consultation hours") < prompt.index("Reception hours")
+    contact = load_clinic_contact()
+    assert contact.phone in prompt
+    assert contact.reception_hours in prompt
     assert "Not available (next 14 days):" in prompt
     assert "Private family matter" not in prompt
     assert doctor["registration_number"] not in prompt
@@ -176,3 +181,18 @@ def test_weekdays_with_the_same_hours_are_grouped() -> None:
     assert chatbot._describe_weekdays([0, 1, 2, 3, 4]) == "Monday to Friday"
     assert chatbot._describe_weekdays([4, 0, 1, 2]) == "Monday to Wednesday, Friday"
     assert chatbot._describe_weekdays([3]) == "Thursday"
+
+
+def test_contact_details_leave_out_optional_fields() -> None:
+    details = chatbot._contact_details(ClinicContact(
+        name="Test Clinic",
+        address_lines=["1 Main Street", "Kandy"],
+        phone="+94 81 000 0000",
+        reception_hours="Monday to Friday, 9:00 to 17:00",
+    ))
+
+    assert "- Address: 1 Main Street, Kandy." in details
+    assert "- Phone (reception): +94 81 000 0000." in details
+    assert "WhatsApp" not in details
+    assert "Email" not in details
+    assert "emergency" not in details.lower()

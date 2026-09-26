@@ -5,7 +5,6 @@ bookings; its context is limited to public clinic information and schedules.
 """
 
 from datetime import datetime, time, timedelta, timezone
-from pathlib import Path
 from typing import Protocol
 from zoneinfo import ZoneInfo
 
@@ -16,9 +15,11 @@ from sqlalchemy.orm import Session
 from app.errors import ChatbotUnavailableError
 from app.models import Availability, DoctorUnavailability
 from app.schemas.chatbot import ChatMessage
+from app.schemas.clinic import ClinicContact
+from app.services.clinic import CONTENT_DIRECTORY, load_clinic_contact
 from app.services.doctors import list_doctors
 
-CLINIC_INFO_PATH = Path(__file__).resolve().parent.parent / "content" / "clinic_info.md"
+CLINIC_INFO_PATH = CONTENT_DIRECTORY / "clinic_info.md"
 TIME_OFF_WINDOW_DAYS = 14
 WEEKDAY_NAMES = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 
@@ -90,8 +91,37 @@ def build_system_prompt(db: Session, clinic_timezone: str) -> str:
         "--- Clinic information ---",
         f"Today is {now.astimezone(zone):%A %d %B %Y}. Times are in the {clinic_timezone} timezone.",
         _doctor_schedules(db, zone, now),
+        _contact_details(load_clinic_contact()),
         CLINIC_INFO_PATH.read_text(encoding="utf-8").strip(),
     ])
+
+
+def _contact_details(contact: ClinicContact) -> str:
+    lines = [
+        "## Contact and location",
+        f"- Clinic name: {contact.name}.",
+        f"- Address: {', '.join(contact.address_lines)}.",
+        f"- Phone (reception): {contact.phone}.",
+    ]
+    if contact.whatsapp:
+        lines.append(f"- WhatsApp (messages only): {contact.whatsapp}.")
+    if contact.email:
+        lines.append(f"- Email: {contact.email}.")
+    lines += [
+        "",
+        "## Reception hours",
+        f"- The reception desk is open {contact.reception_hours}, for enquiries and check-in.",
+        "- Reception hours are not consultation hours. Each doctor has their own consultation "
+        "hours, listed under Doctors and consultation hours.",
+    ]
+    if contact.closed_days:
+        lines.append(f"- {contact.closed_days}.")
+    if contact.emergency_number:
+        lines.append(
+            f"- The clinic does not handle emergencies. In an emergency, call "
+            f"{contact.emergency_number} or go to the nearest hospital emergency unit."
+        )
+    return "\n".join(lines)
 
 
 def _doctor_schedules(db: Session, zone: ZoneInfo, now: datetime) -> str:

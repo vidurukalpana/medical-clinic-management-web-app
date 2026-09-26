@@ -15,18 +15,12 @@ import {
   Sun,
   Moon,
   Monitor,
-  MapPin,
-  Phone,
-  MessageCircle,
-  Mail,
-  Clock,
-  Siren,
 } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { useStaffTheme, type ThemePreference } from "../lib/theme";
-import { CLINIC, dialable } from "../lib/clinic";
 import { Avatar, Spinner } from "./ui";
 import { ChatWidget } from "./ChatWidget";
+import { SiteFooter } from "./SiteFooter";
 
 export function Brand({ to = "/" }: { to?: string }) {
   return (
@@ -84,54 +78,7 @@ export function PublicLayout() {
       <main>
         <Outlet />
       </main>
-      <footer className="site-footer">
-        <div className="container footer-grid">
-          <div className="footer-about">
-            <Brand />
-            <p className="muted">
-              Booking only needs a name and phone number. We never ask for symptoms or medical details online.
-            </p>
-          </div>
-          <address className="footer-col">
-            <h2>Contact us</h2>
-            <span>
-              <MapPin size={16} />
-              <span>
-                {CLINIC.address.map((line) => (
-                  <span key={line} className="footer-line">
-                    {line}
-                  </span>
-                ))}
-              </span>
-            </span>
-            <a href={`tel:${dialable(CLINIC.phone)}`}>
-              <Phone size={16} /> {CLINIC.phone}
-            </a>
-            <a href={`https://wa.me/${dialable(CLINIC.whatsapp).replace("+", "")}`} target="_blank" rel="noreferrer">
-              <MessageCircle size={16} /> WhatsApp {CLINIC.whatsapp}
-            </a>
-            <a href={`mailto:${CLINIC.email}`}>
-              <Mail size={16} /> {CLINIC.email}
-            </a>
-          </address>
-          <div className="footer-col">
-            <h2>Reception hours</h2>
-            <span>
-              <Clock size={16} />
-              <span>
-                <span className="footer-line">{CLINIC.receptionHours}</span>
-                <span className="footer-line muted">{CLINIC.closedDays}</span>
-              </span>
-            </span>
-            <span className="footer-emergency">
-              <Siren size={16} /> Emergency? Call {CLINIC.emergencyNumber} or go to the nearest hospital.
-            </span>
-          </div>
-        </div>
-        <div className="container footer-bottom muted">
-          © {new Date().getFullYear()} {CLINIC.name}
-        </div>
-      </footer>
+      <SiteFooter />
       <ChatWidget />
     </div>
   );

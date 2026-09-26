@@ -1,0 +1,10 @@
+{
+  "name": "CareFlow Clinic",
+  "address_lines": ["No. 42, Lake View Road", "Colombo 05, Sri Lanka"],
+  "phone": "+94 11 234 5678",
+  "whatsapp": "+94 77 123 4567",
+  "email": "hello@careflowclinic.lk",
+  "reception_hours": "Monday to Friday, 8:00 to 18:00",
+  "closed_days": "Closed on weekends and public holidays",
+  "emergency_number": "1990"
+}

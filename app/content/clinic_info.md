@@ -1,18 +1,8 @@
-# CareFlow Clinic
+## About the clinic
+- A small family medical centre offering general (GP) consultations for adults and children.
 
-CareFlow Clinic is a small family medical centre offering general (GP) consultations for adults and children.
-
-## Contact and location
-- Address: No. 42, Lake View Road, Colombo 05, Sri Lanka.
-- Phone (reception): +94 11 234 5678.
-- WhatsApp (messages only): +94 77 123 4567.
-- Email: hello@careflowclinic.lk.
+## Getting here
 - The clinic is on the ground floor, next to City Pharmacy, a five-minute walk from the Havelock Town bus stop.
-
-## Reception hours
-- The reception desk is open Monday to Friday, 8:00 to 18:00, for enquiries and check-in.
-- Reception hours are not consultation hours. Each doctor has their own consultation hours, listed under Doctors below.
-- The clinic is closed on Saturdays, Sundays and public holidays.
 
 ## Fees and payment
 - General consultation: LKR 2,500.
@@ -25,7 +15,6 @@ CareFlow Clinic is a small family medical centre offering general (GP) consultat
 - Follow-up visits, medical certificates and referral letters.
 - Blood pressure and blood sugar checks during a consultation.
 - The clinic has no laboratory or X-ray. Doctors give referral letters to nearby labs when needed.
-- The clinic does not handle emergencies. In an emergency, call 1990 (Suwa Seriya ambulance) or go to the nearest hospital emergency unit.
 
 ## Facilities
 - Free parking for 10 cars behind the building. Street parking is also available.
