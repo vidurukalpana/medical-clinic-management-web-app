@@ -5,6 +5,7 @@ from app.errors.exceptions import (
     AuthenticationRequiredError,
     AvailabilityOverlapError,
     BadRequestError,
+    ChatbotUnavailableError,
     ConflictError,
     DuplicateRegistrationNumberError,
     DoctorFullyBookedError,
@@ -12,6 +13,7 @@ from app.errors.exceptions import (
     InvalidCredentialsError,
     InvalidCurrentPasswordError,
     NotFoundError,
+    ServiceUnavailableError,
     UnavailabilityOverlapError,
 )
 
@@ -20,6 +22,7 @@ __all__ = [
     "AuthenticationRequiredError",
     "AvailabilityOverlapError",
     "BadRequestError",
+    "ChatbotUnavailableError",
     "ConflictError",
     "DuplicateRegistrationNumberError",
     "DoctorFullyBookedError",
@@ -27,5 +30,6 @@ __all__ = [
     "InvalidCredentialsError",
     "InvalidCurrentPasswordError",
     "NotFoundError",
+    "ServiceUnavailableError",
     "UnavailabilityOverlapError",
 ]

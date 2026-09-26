@@ -10,6 +10,7 @@ from app.errors.exceptions import (
     ConflictError,
     ForbiddenError,
     NotFoundError,
+    ServiceUnavailableError,
 )
 
 
@@ -47,4 +48,6 @@ def _status_code_for(error: ApplicationError) -> int:
         return status.HTTP_404_NOT_FOUND
     if isinstance(error, ConflictError):
         return status.HTTP_409_CONFLICT
+    if isinstance(error, ServiceUnavailableError):
+        return status.HTTP_503_SERVICE_UNAVAILABLE
     return status.HTTP_500_INTERNAL_SERVER_ERROR

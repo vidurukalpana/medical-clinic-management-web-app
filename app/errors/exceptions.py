@@ -37,6 +37,16 @@ class ForbiddenError(ApplicationError):
     """Raised when an authenticated user lacks permission."""
 
 
+class ServiceUnavailableError(ApplicationError):
+    """Raised when a dependent service cannot handle the request."""
+
+
+class ChatbotUnavailableError(ServiceUnavailableError):
+    """Raised when the chatbot's language model cannot answer."""
+
+    default_detail = "The chat assistant is unavailable right now. Please try again later."
+
+
 class NotFoundError(ApplicationError):
     """Raised when a requested resource does not exist."""
 
