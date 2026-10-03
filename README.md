@@ -109,6 +109,57 @@ pytest
 
 Tests use `CLINIC_DATABASE_URL` and create a uniquely named temporary PostgreSQL schema. Only that temporary schema is removed after each test; the application's normal tables and clinic data are not changed.
 
+## Deploy to a server
+
+The production stack runs with Docker Compose on one Linux server:
+
+- `db`: PostgreSQL, with its data in the `postgres_data` volume.
+- `backend`: the FastAPI app ([`Dockerfile`](Dockerfile)), reachable only inside the Compose network.
+- `web`: Caddy ([`frontend/Dockerfile`](frontend/Dockerfile), [`deploy/Caddyfile`](deploy/Caddyfile)). It serves the built React app, forwards `/api` to the backend and gets a free HTTPS certificate for the domain.
+
+Only ports 80 and 443 are published. `/docs` and `/openapi.json` are not exposed publicly.
+
+### 1. Prepare the server
+
+Point the domain's DNS `A` record at the server, install Docker with the Compose plugin and allow only SSH, HTTP and HTTPS through the firewall.
+
+### 2. Configure
+
+```bash
+git clone <repository-url>
+cd medical-clinic-management-web-app
+cp .env.production.example .env.production
+```
+
+Edit `.env.production`. Set `DOMAIN`, generate `POSTGRES_PASSWORD` and `CLINIC_SECRET_KEY` with `openssl rand -hex 32`, use the same database password inside `CLINIC_DATABASE_URL`, and choose strong account passwords. `.env.production` is ignored by Git. If `CLINIC_TIMEZONE` is not `Asia/Colombo`, change `VITE_CLINIC_TIMEZONE` in `docker-compose.yml` to match.
+
+### 3. Start
+
+```bash
+docker compose up -d --build
+docker compose ps
+```
+
+Open `https://<your-domain>`. The backend creates the tables and initial accounts on first start. To try the stack before a domain is ready, set `DOMAIN=:80` and open `http://<server-ip>`. Do not use this for real patient data.
+
+### Update, logs and backups
+
+```bash
+git pull && docker compose up -d --build     # deploy a new version
+docker compose logs -f backend               # follow backend logs
+docker compose exec backend python -m app.db.initialize   # in-place upgrade, when a release needs it
+```
+
+Back up the database regularly and keep copies off the server:
+
+```bash
+docker compose exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" -Fc "$POSTGRES_DB"' > clinic-$(date +%F).dump
+```
+
+Restore a dump into an empty database with `docker compose exec -T db sh -c 'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < clinic-YYYY-MM-DD.dump`.
+
+Before accepting real bookings, add rate limiting and contact verification (see [Scope and privacy](#scope-and-privacy)).
+
 ## Authentication and doctor accounts
 
 The local environment uses these initial usernames:

@@ -1,0 +1,14 @@
+.git
+.gitignore
+.idea
+.venv
+.env
+.env.*
+**/__pycache__
+.pytest_cache
+.ruff_cache
+.coverage
+htmlcov
+frontend
+tests
+deploy

@@ -1,0 +1,25 @@
+# DOMAIN comes from .env.production. A real domain gets a free HTTPS
+# certificate automatically; ":80" serves plain HTTP for a local trial.
+{$DOMAIN} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+
+	# Only /api reaches FastAPI, so /docs and /openapi.json stay private.
+	handle /api/* {
+		reverse_proxy backend:8000
+	}
+
+	# The React app uses client-side routing, so unknown paths fall back to index.html.
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}
