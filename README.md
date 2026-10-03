@@ -175,6 +175,26 @@ docker compose start backend
 
 Test a restore on a spare server now and then. A backup that has never been restored is not proven.
 
+### Uptime monitoring
+
+[`deploy/aws/uptime-monitoring.yaml`](deploy/aws/uptime-monitoring.yaml) is a CloudFormation stack.
+
+- It creates a Route 53 health check that calls `https://<domain>/api/health` from three regions every 30 seconds. That endpoint returns 200 only when the backend can reach the database.
+- It also creates a CloudWatch alarm that emails you when the check fails for about two minutes, and again when the site recovers.
+
+Deploy it from any computer with the AWS CLI. It must be **us-east-1**, even when the server is in another region, because Route 53 publishes its health check metrics only there:
+
+```bash
+aws cloudformation deploy --region us-east-1 \
+  --stack-name clinic-uptime \
+  --template-file deploy/aws/uptime-monitoring.yaml \
+  --parameter-overrides DomainName=clinic.example.com AlertEmail=you@example.com
+```
+
+AWS then sends a "Subscription Confirmation" email. Click its link, or no alerts are delivered. To test the alert, run `docker compose stop backend` and wait about three minutes for the email. Then run `docker compose start backend` and you should get a recovery email. To remove the monitoring, run `aws cloudformation delete-stack --region us-east-1 --stack-name clinic-uptime`.
+
+The checks show up in the backend logs as `GET /api/health` about six times a minute, and the log rotation keeps that bounded.
+
 Before accepting real bookings, add rate limiting and contact verification (see [Scope and privacy](#scope-and-privacy)).
 
 ## Authentication and doctor accounts
