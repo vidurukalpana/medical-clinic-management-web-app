@@ -149,6 +149,8 @@ git pull && docker compose up -d --build     # deploy a new version; migrations 
 docker compose logs -f backend               # follow backend logs
 ```
 
+Docker rotates each service's logs at 10 MB and keeps 5 compressed files, so logs use at most about 200 MB in total. Older lines are discarded. Change the limits in the `x-logging` block of `docker-compose.yml`.
+
 ### Backups
 
 The `backup` service ([`deploy/backup`](deploy/backup)) dumps the database every day at `BACKUP_TIME` (in `CLINIC_TIMEZONE`). It also takes a backup on start when the last one is more than a day old. Each dump is checked with `pg_restore --list`, then kept in the `backups` volume for `BACKUP_KEEP_LOCAL_DAYS` days. When `BACKUP_S3_BUCKET` is set, it is also uploaded to S3 with server-side encryption. Keep the S3 copy: the local copies are lost with the server.

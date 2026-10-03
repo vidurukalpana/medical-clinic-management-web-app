@@ -2,10 +2,20 @@
 # Settings come from .env.production (copy .env.production.example).
 # Start it with: docker compose up -d --build
 
+# Docker keeps container logs forever by default, which eventually fills the disk.
+# Each service keeps at most 5 files of 10 MB; rotated files are compressed.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+    compress: "true"
+
 services:
   db:
     image: postgres:17-alpine
     restart: unless-stopped
+    logging: *default-logging
     env_file: .env.production
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -18,6 +28,7 @@ services:
   backend:
     build: .
     restart: unless-stopped
+    logging: *default-logging
     env_file: .env.production
     environment:
       CLINIC_DEBUG: "false"
@@ -35,6 +46,7 @@ services:
   backup:
     build: ./deploy/backup
     restart: unless-stopped
+    logging: *default-logging
     env_file: .env.production
     volumes:
       - backups:/backups
@@ -55,6 +67,7 @@ services:
         # Must match CLINIC_TIMEZONE in .env.production.
         VITE_CLINIC_TIMEZONE: Asia/Colombo
     restart: unless-stopped
+    logging: *default-logging
     env_file: .env.production
     ports:
       - "80:80"
