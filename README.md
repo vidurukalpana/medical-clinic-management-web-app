@@ -62,8 +62,10 @@ When the environment is active, `(.venv)` appears at the beginning of the Termin
 ### 4. Install the dependencies
 
 ```bash
-python -m pip install -r requirements.txt
+python -m pip install -r requirements-dev.txt
 ```
+
+`requirements-dev.txt` installs the application dependencies from `requirements.txt` plus the test tools. The production Docker image installs only `requirements.txt`.
 
 ### 5. Create the environment file
 
