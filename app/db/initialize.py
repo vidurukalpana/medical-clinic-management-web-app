@@ -1,4 +1,8 @@
-from sqlalchemy import Connection, Engine, text
+from pathlib import Path
+
+from alembic import command
+from alembic.config import Config
+from sqlalchemy import Connection, Engine, inspect, text
 from sqlalchemy.orm import Session
 
 import app.models  # Register all SQLAlchemy models before creating tables.
@@ -6,13 +10,37 @@ from app.core.config import Settings, get_settings
 from app.db.base import Base
 from app.db.seed import seed_initial_accounts
 
+MIGRATIONS_DIRECTORY = Path(__file__).resolve().parents[2] / "migrations"
+# The revision that matches the tables `create_all` made before Alembic was introduced.
+BASELINE_REVISION = "0001"
+# Any constant works; it only has to be the same for every app process.
+MIGRATION_LOCK_KEY = 72_410_001
+
 
 def initialize_database(database_engine: Engine, settings: Settings) -> None:
-    Base.metadata.create_all(bind=database_engine)
+    migrate_database(database_engine, settings.timezone)
     with Session(database_engine) as db:
         seed_initial_accounts(db, settings)
     with database_engine.connect() as connection:
         connection.execute(text("SELECT 1"))
+
+
+def migrate_database(database_engine: Engine, timezone: str) -> None:
+    """Bring the schema to the latest Alembic revision in one transaction."""
+    with database_engine.begin() as connection:
+        # Concurrent app processes wait here instead of migrating at the same time.
+        connection.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": MIGRATION_LOCK_KEY})
+        config = Config()
+        config.set_main_option("script_location", str(MIGRATIONS_DIRECTORY))
+        config.attributes["connection"] = connection
+
+        tables = set(inspect(connection).get_table_names())
+        if "users" in tables and "alembic_version" not in tables:
+            # Created by `create_all` before Alembic: finish that schema, then record it as the baseline.
+            Base.metadata.create_all(bind=connection)
+            _upgrade_legacy_tables(connection, timezone)
+            command.stamp(config, BASELINE_REVISION)
+        command.upgrade(config, "head")
 
 
 def _has_column(connection: Connection, table: str, column: str) -> bool:
@@ -76,18 +104,23 @@ def _upgrade_doctor_unavailability(connection: Connection, timezone: str) -> Non
     ))
 
 
+def _upgrade_legacy_tables(connection: Connection, timezone: str) -> None:
+    """Move tables made by older `create_all` releases to the baseline schema; safe to repeat."""
+    connection.execute(text("ALTER TABLE patients ALTER COLUMN date_of_birth DROP NOT NULL"))
+    _upgrade_patient_gender(connection)
+    _upgrade_doctor_unavailability(connection, timezone)
+    connection.execute(text("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS guest_token_hash VARCHAR(64)"))
+    connection.execute(text("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS booked_by_user_id INTEGER REFERENCES users(id)"))
+    connection.execute(text("CREATE INDEX IF NOT EXISTS ix_appointments_booked_by_user_id ON appointments (booked_by_user_id)"))
+
+
 def upgrade_booking_schema(
     database_engine: Engine, *, purge_clinical_data: bool = False, timezone: str | None = None,
 ) -> None:
     """Upgrade existing tables in place; clinical deletion requires an explicit flag."""
     timezone = timezone or get_settings().timezone
     with database_engine.begin() as connection:
-        connection.execute(text("ALTER TABLE patients ALTER COLUMN date_of_birth DROP NOT NULL"))
-        _upgrade_patient_gender(connection)
-        _upgrade_doctor_unavailability(connection, timezone)
-        connection.execute(text("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS guest_token_hash VARCHAR(64)"))
-        connection.execute(text("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS booked_by_user_id INTEGER REFERENCES users(id)"))
-        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_appointments_booked_by_user_id ON appointments (booked_by_user_id)"))
+        _upgrade_legacy_tables(connection, timezone)
         if purge_clinical_data:
             connection.execute(text("ALTER TABLE appointments DROP COLUMN IF EXISTS reason"))
             for column in ("presenting_complaint", "diagnosis", "clinical_notes", "treatment_plan"):

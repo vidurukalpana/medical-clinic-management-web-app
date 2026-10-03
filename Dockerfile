@@ -12,6 +12,8 @@ RUN pip install -r requirements.txt
 
 COPY main.py .
 COPY app ./app
+COPY alembic.ini .
+COPY migrations ./migrations
 
 RUN useradd --system --no-create-home clinic
 USER clinic

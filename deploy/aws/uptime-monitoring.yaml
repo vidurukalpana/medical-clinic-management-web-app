@@ -1,0 +1,90 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Uptime monitoring for the clinic app. Route 53 calls the health endpoint from three
+  regions every 30 seconds and CloudWatch emails the alert address when it fails and
+  again when it recovers. Deploy this stack in us-east-1: Route 53 publishes health
+  check metrics only there, whichever region the server runs in.
+
+Parameters:
+  DomainName:
+    Type: String
+    Description: The clinic's public domain, the same as DOMAIN in .env.production.
+    AllowedPattern: "^[a-z0-9.-]+\\.[a-z]{2,}$"
+    ConstraintDescription: A lowercase domain name such as clinic.example.com.
+  AlertEmail:
+    Type: String
+    Description: Address that receives down and recovery emails. Confirm the subscription email first.
+    AllowedPattern: "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+  HealthCheckPath:
+    Type: String
+    Default: /api/health
+    Description: Returns 200 only when the backend can reach the database.
+
+Rules:
+  RequireUsEast1:
+    Assertions:
+      - Assert: !Equals [!Ref "AWS::Region", us-east-1]
+        AssertDescription: Route 53 health check metrics exist only in us-east-1. Deploy this stack there.
+
+Resources:
+  AlertTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Clinic uptime
+      Subscription:
+        - Protocol: email
+          Endpoint: !Ref AlertEmail
+
+  HealthCheck:
+    Type: AWS::Route53::HealthCheck
+    Properties:
+      HealthCheckConfig:
+        Type: HTTPS
+        FullyQualifiedDomainName: !Ref DomainName
+        Port: 443
+        ResourcePath: !Ref HealthCheckPath
+        EnableSNI: true
+        RequestInterval: 30
+        # Unhealthy after three failed checks in a row (about 90 seconds).
+        FailureThreshold: 3
+        # Three regions (the minimum) keep the request rate low: about 6 requests a minute.
+        Regions:
+          - ap-southeast-1
+          - ap-northeast-1
+          - eu-west-1
+      HealthCheckTags:
+        - Key: Name
+          Value: !Sub "${DomainName} ${HealthCheckPath}"
+
+  DownAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "clinic-down-${DomainName}"
+      AlarmDescription: !Sub "https://${DomainName}${HealthCheckPath} is failing its health check."
+      Namespace: AWS/Route53
+      MetricName: HealthCheckStatus
+      Dimensions:
+        - Name: HealthCheckId
+          Value: !Ref HealthCheck
+      Statistic: Minimum
+      Period: 60
+      EvaluationPeriods: 2
+      DatapointsToAlarm: 2
+      ComparisonOperator: LessThanThreshold
+      Threshold: 1
+      # No data means Route 53 stopped reporting, which is not proof the site is up.
+      TreatMissingData: breaching
+      AlarmActions:
+        - !Ref AlertTopic
+      OKActions:
+        - !Ref AlertTopic
+
+Outputs:
+  HealthCheckId:
+    Description: Shown in the Route 53 console under Health checks.
+    Value: !Ref HealthCheck
+  AlarmName:
+    Value: !Ref DownAlarm
+  AlertTopicArn:
+    Description: Subscribe more addresses (or SMS) to this topic.
+    Value: !Ref AlertTopic

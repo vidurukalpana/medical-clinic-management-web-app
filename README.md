@@ -62,8 +62,10 @@ When the environment is active, `(.venv)` appears at the beginning of the Termin
 ### 4. Install the dependencies
 
 ```bash
-python -m pip install -r requirements.txt
+python -m pip install -r requirements-dev.txt
 ```
+
+`requirements-dev.txt` installs the application dependencies from `requirements.txt` plus the test tools. The production Docker image installs only `requirements.txt`.
 
 ### 5. Create the environment file
 
@@ -81,7 +83,7 @@ Open `.env`, replace `change-this-password` in the PostgreSQL URL with the passw
 python main.py
 ```
 
-At startup, SQLAlchemy connects to `medical_clinic` and creates any missing tables, constraints and relationships from the application models. It also adds the initial administrator and two doctor accounts. The application intentionally accepts only a `postgresql+psycopg://` database URL.
+At startup, the application applies any pending [database migrations](#database-migrations) to `medical_clinic`, which creates the tables on a new database. It also adds the initial administrator and two doctor accounts. The application intentionally accepts only a `postgresql+psycopg://` database URL.
 
 Open these addresses in a web browser:
 
@@ -140,23 +142,58 @@ docker compose up -d --build
 docker compose ps
 ```
 
-Open `https://<your-domain>`. The backend creates the tables and initial accounts on first start. To try the stack before a domain is ready, set `DOMAIN=:80` and open `http://<server-ip>`. Do not use this for real patient data.
+Open `https://<your-domain>`. The backend applies the database migrations and creates the initial accounts on start. To try the stack before a domain is ready, set `DOMAIN=:80` and open `http://<server-ip>`. Do not use this for real patient data.
 
-### Update, logs and backups
+### Update and logs
 
 ```bash
-git pull && docker compose up -d --build     # deploy a new version
+git pull && docker compose up -d --build     # deploy a new version; migrations run when the backend starts
 docker compose logs -f backend               # follow backend logs
-docker compose exec backend python -m app.db.initialize   # in-place upgrade, when a release needs it
 ```
 
-Back up the database regularly and keep copies off the server:
+Docker rotates each service's logs at 10 MB and keeps 5 compressed files, so logs use at most about 200 MB in total. Older lines are discarded. Change the limits in the `x-logging` block of `docker-compose.yml`.
+
+### Backups
+
+The `backup` service ([`deploy/backup`](deploy/backup)) dumps the database every day at `BACKUP_TIME` (in `CLINIC_TIMEZONE`). It also takes a backup on start when the last one is more than a day old. Each dump is checked with `pg_restore --list`, then kept in the `backups` volume for `BACKUP_KEEP_LOCAL_DAYS` days. When `BACKUP_S3_BUCKET` is set, it is also uploaded to S3 with server-side encryption. Keep the S3 copy: the local copies are lost with the server.
+
+The service is marked unhealthy in `docker compose ps` when no backup has succeeded for 26 hours.
 
 ```bash
-docker compose exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" -Fc "$POSTGRES_DB"' > clinic-$(date +%F).dump
+docker compose logs backup                          # backup history and errors
+docker compose exec backup clinic-backup backup-now # back up immediately
+docker compose exec backup clinic-backup list       # backups on the server and in S3
 ```
 
-Restore a dump into an empty database with `docker compose exec -T db sh -c 'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < clinic-YYYY-MM-DD.dump`.
+To restore, stop the backend, restore a dump (a file name from `list` or an `s3://` URI), then start the backend again. Tables in the dump replace the existing ones.
+
+```bash
+docker compose stop backend
+docker compose exec backup clinic-backup restore medical_clinic_20260101T203000Z.dump
+docker compose start backend
+```
+
+Test a restore on a spare server now and then. A backup that has never been restored is not proven.
+
+### Uptime monitoring
+
+[`deploy/aws/uptime-monitoring.yaml`](deploy/aws/uptime-monitoring.yaml) is a CloudFormation stack.
+
+- It creates a Route 53 health check that calls `https://<domain>/api/health` from three regions every 30 seconds. That endpoint returns 200 only when the backend can reach the database.
+- It also creates a CloudWatch alarm that emails you when the check fails for about two minutes, and again when the site recovers.
+
+Deploy it from any computer with the AWS CLI. It must be **us-east-1**, even when the server is in another region, because Route 53 publishes its health check metrics only there:
+
+```bash
+aws cloudformation deploy --region us-east-1 \
+  --stack-name clinic-uptime \
+  --template-file deploy/aws/uptime-monitoring.yaml \
+  --parameter-overrides DomainName=clinic.example.com AlertEmail=you@example.com
+```
+
+AWS then sends a "Subscription Confirmation" email. Click its link, or no alerts are delivered. To test the alert, run `docker compose stop backend` and wait about three minutes for the email. Then run `docker compose start backend` and you should get a recovery email. To remove the monitoring, run `aws cloudformation delete-stack --region us-east-1 --stack-name clinic-uptime`.
+
+The checks show up in the backend logs as `GET /api/health` about six times a minute, and the log rotation keeps that bounded.
 
 Before accepting real bookings, add rate limiting and contact verification (see [Scope and privacy](#scope-and-privacy)).
 
@@ -299,15 +336,29 @@ Visits move from `waiting` to `in_progress` to `completed`. Waiting or in-progre
 
 Database row locks serialize booking and queue allocation per doctor. Conflicting bookings return 409, and failed guest bookings do not leave orphan patient records. Cancelled reservations release capacity.
 
-## Existing database upgrade
+## Database migrations
 
-New installations create the revised schema automatically. Existing installations need this in-place upgrade before running the revised app:
+Schema changes are managed with [Alembic](https://alembic.sqlalchemy.org/). The revisions are in [`migrations/versions`](migrations/versions), and the backend applies any pending ones at startup, in one transaction. A PostgreSQL advisory lock makes concurrent processes wait for each other.
 
-```bash
-python -m app.db.initialize
-```
+Databases created before Alembic (by `create_all`, with no `alembic_version` table) are upgraded automatically on the first start. Missing tables are created. Each legacy `doctor_unavailability.unavailable_date` becomes a whole clinic-local day in `start_at`/`end_at`. The legacy patient `sex` column is copied into `gender`. Birth date becomes optional, and the guest-token and account-ownership columns are added. The database is then stamped at the baseline revision `0001`. Existing rows and the legacy columns are kept, and no legacy clinical data is deleted.
 
-This adds guest-token/account ownership columns and makes birth date optional. It also moves older schemas to the current columns: each legacy `doctor_unavailability.unavailable_date` becomes a whole clinic-local day in `start_at`/`end_at`, and the legacy patient `sex` column is copied into `gender`. The command is safe to run repeatedly. It preserves existing rows, keeps the legacy columns (no longer required), and does not delete legacy clinical data.
+### Change the schema
+
+1. Change the models in `app/models`.
+2. Generate a revision, then read it and fix anything autogenerate got wrong. For example, it does not detect standalone sequences, and it treats a renamed column as one dropped column plus one added column.
+
+   ```bash
+   alembic revision --autogenerate -m "add patient email"
+   ```
+
+3. Apply it with `alembic upgrade head` (or restart the app), and run the tests. `tests/test_migrations.py` fails when the models and the migrations disagree.
+4. Commit the new file in `migrations/versions` together with the model change.
+
+Useful commands: `alembic current`, `alembic history`, `alembic check` (reports model changes that have no migration yet), `alembic downgrade -1` and `alembic upgrade head --sql` (prints the SQL without running it). They use `CLINIC_DATABASE_URL`. In production, run them with `docker compose exec backend alembic ...`. The backup service takes a dump each day, and you can take one before a risky release with `docker compose exec backup clinic-backup backup-now`.
+
+Autogenerate ignores the legacy columns and the old `doctor_working_hours` table (see `migrations/env.py`), so a revision never drops them by accident.
+
+### Remove legacy clinical data
 
 To permanently remove the old clinical columns and their contents after the clinic has authorized their deletion, run:
 
