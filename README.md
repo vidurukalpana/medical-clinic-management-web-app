@@ -142,7 +142,7 @@ docker compose ps
 
 Open `https://<your-domain>`. The backend creates the tables and initial accounts on first start. To try the stack before a domain is ready, set `DOMAIN=:80` and open `http://<server-ip>`. Do not use this for real patient data.
 
-### Update, logs and backups
+### Update and logs
 
 ```bash
 git pull && docker compose up -d --build     # deploy a new version
@@ -150,13 +150,27 @@ docker compose logs -f backend               # follow backend logs
 docker compose exec backend python -m app.db.initialize   # in-place upgrade, when a release needs it
 ```
 
-Back up the database regularly and keep copies off the server:
+### Backups
+
+The `backup` service ([`deploy/backup`](deploy/backup)) dumps the database every day at `BACKUP_TIME` (in `CLINIC_TIMEZONE`). It also takes a backup on start when the last one is more than a day old. Each dump is checked with `pg_restore --list`, then kept in the `backups` volume for `BACKUP_KEEP_LOCAL_DAYS` days. When `BACKUP_S3_BUCKET` is set, it is also uploaded to S3 with server-side encryption. Keep the S3 copy: the local copies are lost with the server.
+
+The service is marked unhealthy in `docker compose ps` when no backup has succeeded for 26 hours.
 
 ```bash
-docker compose exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" -Fc "$POSTGRES_DB"' > clinic-$(date +%F).dump
+docker compose logs backup                          # backup history and errors
+docker compose exec backup clinic-backup backup-now # back up immediately
+docker compose exec backup clinic-backup list       # backups on the server and in S3
 ```
 
-Restore a dump into an empty database with `docker compose exec -T db sh -c 'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < clinic-YYYY-MM-DD.dump`.
+To restore, stop the backend, restore a dump (a file name from `list` or an `s3://` URI), then start the backend again. Tables in the dump replace the existing ones.
+
+```bash
+docker compose stop backend
+docker compose exec backup clinic-backup restore medical_clinic_20260101T203000Z.dump
+docker compose start backend
+```
+
+Test a restore on a spare server now and then. A backup that has never been restored is not proven.
 
 Before accepting real bookings, add rate limiting and contact verification (see [Scope and privacy](#scope-and-privacy)).
 

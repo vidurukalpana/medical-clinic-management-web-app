@@ -31,6 +31,23 @@ services:
       retries: 3
       start_period: 20s
 
+  # Daily pg_dump to the backups volume and, when BACKUP_S3_BUCKET is set, to Amazon S3.
+  backup:
+    build: ./deploy/backup
+    restart: unless-stopped
+    env_file: .env.production
+    volumes:
+      - backups:/backups
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      # Unhealthy when the last successful backup is more than 26 hours old.
+      test: ["CMD-SHELL", "test -n \"$$(find /backups/.last-success -mmin -1560 2>/dev/null)\""]
+      interval: 1h
+      timeout: 10s
+      start_period: 10m
+
   web:
     build:
       context: ./frontend
@@ -52,5 +69,6 @@ services:
 
 volumes:
   postgres_data:
+  backups:
   caddy_data:
   caddy_config:
