@@ -22,9 +22,7 @@ export function SiteFooter() {
       <div className="container footer-grid">
         <div className="footer-about">
           <Brand />
-          <p className="muted">
-            Booking only needs a name and phone number. We never ask for symptoms or medical details online.
-          </p>
+          <p className="muted">Caring for you, right on time.</p>
         </div>
         {contact && (
           <address className="footer-col">

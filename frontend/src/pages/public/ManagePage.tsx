@@ -64,7 +64,7 @@ export function ManagePage() {
       <div className="page-intro">
         <span className="eyebrow">Manage booking</span>
         <h1>Find your appointment</h1>
-        <p className="muted">Enter the booking number and private code from your confirmation.</p>
+        <p className="muted">Enter your booking number and private code.</p>
       </div>
 
       <div className="manage-layout">
@@ -184,10 +184,7 @@ export function ManagePage() {
             <div className="manage-placeholder">
               <KeyRound size={28} />
               <p>Your booking will appear here.</p>
-              <p className="muted small">
-                Lost your code? Call the clinic reception. For your privacy we can't recover it from a phone number
-                online.
-              </p>
+              <p className="muted small">Lost your code? Call reception.</p>
             </div>
           )}
         </div>

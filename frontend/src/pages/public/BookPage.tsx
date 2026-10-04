@@ -170,10 +170,7 @@ export function BookPage() {
               }}
             >
               <h2 className="step-title">Just two details</h2>
-              <p className="muted">
-                We only need these to call your name at the clinic. Please don't include symptoms or medical
-                information.
-              </p>
+              <p className="muted">Please don't include medical details.</p>
               <div className="form-grid">
                 <Field label="Full name">
                   <div className="input-icon">
@@ -209,9 +206,7 @@ export function BookPage() {
               </div>
               <label className="check">
                 <input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} />
-                <span>
-                  Remember this booking on this device <span className="muted">(stores your private code in this browser)</span>
-                </span>
+                <span>Remember on this device</span>
               </label>
               {user?.role === "patient" && (
                 <div className="alert alert-info">
@@ -240,10 +235,6 @@ export function BookPage() {
             label="Time"
             value={slot ? `${formatTime(slot.start_at)} – ${formatTime(slot.end_at)}` : undefined}
           />
-          <div className="summary-note">
-            <KeyRound size={16} />
-            <span>You'll get a private code to manage this booking. No account needed.</span>
-          </div>
         </aside>
       </div>
     </div>
@@ -334,10 +325,7 @@ function Confirmation({ booking, doctor, remembered }: {
             </Button>
           </div>
           <p className="muted small">
-            {remembered
-              ? "Saved in this browser too. "
-              : "Keep this code safe. The clinic can't recover it from your phone number. "}
-            Anyone with the code can view, move or cancel this booking.
+            {remembered ? "Saved on this device." : "Keep this code safe. It can't be recovered."}
           </p>
         </div>
 
