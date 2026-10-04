@@ -1049,6 +1049,19 @@ textarea.input {
   color: var(--text-3);
   font-weight: 600;
 }
+.fc-empty {
+  min-height: 260px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+  color: var(--text-2);
+}
+.fc-empty svg {
+  color: var(--primary);
+}
 .fc-slots {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -1066,11 +1079,6 @@ textarea.input {
   background: var(--primary);
   border-color: var(--primary);
   color: #fff;
-}
-.fc-slots span.off {
-  color: var(--text-3);
-  text-decoration: line-through;
-  background: var(--surface-2);
 }
 .float-card-queue {
   bottom: 10px;

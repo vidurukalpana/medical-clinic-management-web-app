@@ -1,6 +1,17 @@
 import { Link } from "react-router-dom";
-import { CalendarPlus, ShieldCheck, Timer, ArrowRight, KeyRound, Stethoscope, HeartPulse } from "lucide-react";
-import { usePublicDoctors } from "../../lib/hooks";
+import {
+  CalendarPlus,
+  CalendarX,
+  ShieldCheck,
+  Timer,
+  ArrowRight,
+  KeyRound,
+  Stethoscope,
+  HeartPulse,
+} from "lucide-react";
+import type { PublicDoctor } from "../../lib/api";
+import { useNextAvailable, usePublicDoctors } from "../../lib/hooks";
+import { addDays, clinicDate, formatDay, formatTime } from "../../lib/time";
 import { Avatar, EmptyState, ErrorNote, Spinner } from "../../components/ui";
 
 const STEPS = [
@@ -37,47 +48,7 @@ export function HomePage() {
             </div>
           </div>
 
-          <div className="hero-visual" aria-hidden>
-            <div className="float-card float-card-main">
-              <div className="fc-head">
-                <span className="fc-pill">Confirmed</span>
-                <span className="muted mono">#1042</span>
-              </div>
-              <div className="fc-doc">
-                <Avatar name="Doctor One" size={44} tone={0} />
-                <div>
-                  <strong>Doctor One</strong>
-                  <span className="muted">General consultation</span>
-                </div>
-              </div>
-              <div className="fc-when">
-                <div>
-                  <small>Date</small>
-                  <strong>Tue, 14 Oct</strong>
-                </div>
-                <div>
-                  <small>Time</small>
-                  <strong>9:20 AM</strong>
-                </div>
-              </div>
-              <div className="fc-slots">
-                {["9:00", "9:10", "9:20", "9:30", "9:40", "9:50"].map((time, index) => (
-                  <span key={time} className={index === 2 ? "on" : index === 0 || index === 4 ? "off" : ""}>
-                    {time}
-                  </span>
-                ))}
-              </div>
-            </div>
-            <div className="float-card float-card-queue">
-              <small>Now serving</small>
-              <strong className="queue-num">07</strong>
-              <span className="muted">3 patients ahead</span>
-            </div>
-            <div className="float-card float-card-mini">
-              <ShieldCheck size={18} />
-              <span>Private booking code</span>
-            </div>
-          </div>
+          <HeroVisual doctors={doctors.data} />
         </div>
       </section>
 
@@ -146,5 +117,78 @@ export function HomePage() {
         </div>
       </section>
     </>
+  );
+}
+
+function dayLabel(day: string) {
+  const today = clinicDate();
+  if (day === today) return "Today";
+  if (day === addDays(today, 1)) return "Tomorrow";
+  return formatDay(day, "short");
+}
+
+/** Live preview of the soonest open appointment; never shows patient data. */
+function HeroVisual({ doctors }: { doctors: PublicDoctor[] | undefined }) {
+  const next = useNextAvailable(doctors);
+  const found = next.data;
+
+  return (
+    <div className="hero-visual" aria-hidden>
+      <div className="float-card float-card-main">
+        {found ? (
+          <>
+            <div className="fc-head">
+              <span className="fc-pill">Next available</span>
+              <span className="muted mono">Reg. {found.doctor.registration_number}</span>
+            </div>
+            <div className="fc-doc">
+              <Avatar name={found.doctor.display_name} size={44} tone={found.doctorIndex % 6} />
+              <div>
+                <strong>{found.doctor.display_name}</strong>
+                <span className="muted">Registered doctor</span>
+              </div>
+            </div>
+            <div className="fc-when">
+              <div>
+                <small>Date</small>
+                <strong>{dayLabel(found.day)}</strong>
+              </div>
+              <div>
+                <small>Time</small>
+                <strong>{formatTime(found.slots[0].start_at)}</strong>
+              </div>
+            </div>
+            <div className="fc-slots">
+              {found.slots.slice(0, 6).map((slot, index) => (
+                <span key={slot.start_at} className={index === 0 ? "on" : ""}>
+                  {formatTime(slot.start_at).replace(/\s?[AP]M$/, "")}
+                </span>
+              ))}
+            </div>
+          </>
+        ) : next.isPending || !doctors ? (
+          <div className="fc-empty">
+            <Spinner label="Finding the next open time…" />
+          </div>
+        ) : (
+          <div className="fc-empty">
+            <CalendarX size={28} />
+            <strong>{next.isError ? "See open times on the booking page" : "Fully booked this week"}</strong>
+            {!next.isError && <span className="muted">Please check back soon.</span>}
+          </div>
+        )}
+      </div>
+      {found && (
+        <div className="float-card float-card-queue">
+          <small>{dayLabel(found.day)}</small>
+          <strong className="queue-num">{String(found.slots.length).padStart(2, "0")}</strong>
+          <span className="muted">{found.slots.length === 1 ? "slot left" : "slots left"}</span>
+        </div>
+      )}
+      <div className="float-card float-card-mini">
+        <ShieldCheck size={18} />
+        <span>Private booking code</span>
+      </div>
+    </div>
   );
 }
