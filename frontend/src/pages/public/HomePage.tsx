@@ -1,22 +1,12 @@
 import { Link } from "react-router-dom";
-import {
-  CalendarPlus,
-  ShieldCheck,
-  Timer,
-  UserRoundCheck,
-  ArrowRight,
-  KeyRound,
-  Sparkles,
-  BadgeCheck,
-  Stethoscope,
-} from "lucide-react";
+import { CalendarPlus, ShieldCheck, Timer, ArrowRight, KeyRound, Stethoscope, HeartPulse } from "lucide-react";
 import { usePublicDoctors } from "../../lib/hooks";
 import { Avatar, EmptyState, ErrorNote, Spinner } from "../../components/ui";
 
 const STEPS = [
-  { icon: Stethoscope, title: "Choose your doctor", text: "See who's consulting and how many slots remain each day." },
-  { icon: Timer, title: "Pick a time that suits you", text: "Live availability, so you never book a slot that's already taken." },
-  { icon: KeyRound, title: "Keep your private code", text: "Use it to check, move or cancel your visit. You don't need an account." },
+  { icon: Stethoscope, title: "Choose a doctor", text: "See who's in this week." },
+  { icon: Timer, title: "Pick a time", text: "Whatever suits your day." },
+  { icon: KeyRound, title: "Keep your code", text: "Change or cancel anytime." },
 ];
 
 export function HomePage() {
@@ -29,17 +19,14 @@ export function HomePage() {
         <div className="container hero-inner">
           <div className="hero-copy">
             <span className="eyebrow">
-              <Sparkles size={14} /> Same-week appointments available
+              <HeartPulse size={14} /> Care, right on time
             </span>
             <h1>
               Skip the waiting room.
               <br />
               <span className="gradient-text">See your doctor on time.</span>
             </h1>
-            <p className="lead">
-              Book a consultation in under a minute with just your name and phone number. Arrive at your slot and
-              we'll take it from there.
-            </p>
+            <p className="lead">Book in under a minute. We'll be ready when you arrive.</p>
             <div className="hero-cta">
               <Link to="/book" className="btn btn-accent btn-lg">
                 <CalendarPlus size={18} /> Book an appointment
@@ -48,17 +35,6 @@ export function HomePage() {
                 Manage a booking
               </Link>
             </div>
-            <ul className="hero-trust">
-              <li>
-                <UserRoundCheck size={16} /> No account needed
-              </li>
-              <li>
-                <ShieldCheck size={16} /> No medical details online
-              </li>
-              <li>
-                <BadgeCheck size={16} /> Registered doctors
-              </li>
-            </ul>
           </div>
 
           <div className="hero-visual" aria-hidden>
@@ -108,7 +84,7 @@ export function HomePage() {
       <section className="container section">
         <div className="section-head">
           <span className="eyebrow">How it works</span>
-          <h2>Three steps, no paperwork</h2>
+          <h2>Three simple steps</h2>
         </div>
         <div className="steps">
           {STEPS.map(({ icon: Icon, title, text }, index) => (
@@ -162,7 +138,7 @@ export function HomePage() {
         <div className="cta-band">
           <div>
             <h2>Already booked?</h2>
-            <p>Use your booking number and private code to check, move or cancel your visit.</p>
+            <p>Check, move or cancel your visit.</p>
           </div>
           <Link to="/manage" className="btn btn-lg btn-light">
             Manage my booking <ArrowRight size={18} />

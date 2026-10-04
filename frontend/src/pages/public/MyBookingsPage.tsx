@@ -60,7 +60,6 @@ export function MyBookingsPage() {
         <div>
           <span className="eyebrow">Hi, {user.username}</span>
           <h1>My bookings</h1>
-          <p className="muted">Bookings you made while signed in. Earlier guest bookings aren't linked automatically.</p>
         </div>
         <div className="row">
           <Button variant="ghost" icon={<KeyRound size={16} />} onClick={() => setShowPassword((v) => !v)}>
