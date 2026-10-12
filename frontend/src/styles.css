@@ -3447,6 +3447,9 @@ td .action-row {
   background: none;
   border: 0;
   padding: 0;
+  color: var(--primary);
+  font: inherit;
+  font-weight: 700;
   align-self: flex-start;
   cursor: pointer;
 }
