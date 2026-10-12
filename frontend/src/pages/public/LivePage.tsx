@@ -63,7 +63,10 @@ function LiveCard({ session, tone, yourNumber }: { session: LiveSession; tone: n
       )}
 
       {open && (
-        <p className="muted small">{waiting === 0 ? "No one waiting." : `${waiting} still to be seen`}</p>
+        <p className="muted small">
+          {session.doctor_arrived_at ? `Doctor arrived at ${formatTime(session.doctor_arrived_at)} · ` : ""}
+          {waiting === 0 ? "No one waiting." : `${waiting} still to be seen`}
+        </p>
       )}
       {yourNumber && open && <YourPlace session={session} number={yourNumber} />}
     </article>

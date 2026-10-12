@@ -3364,3 +3364,45 @@ td .action-row {
     padding-top: 0;
   }
 }
+
+/* Doctor arrival and consultation times */
+.session-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+.queue-seen {
+  margin-top: 12px;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+  font-size: 0.86rem;
+}
+.queue-seen summary {
+  cursor: pointer;
+  font-weight: 650;
+}
+.queue-seen ul {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.queue-seen li {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: baseline;
+}
+.queue-seen-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

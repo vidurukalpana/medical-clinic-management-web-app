@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from sqlalchemy import CheckConstraint, Date, ForeignKey, Index, String, UniqueConstraint, text
+from sqlalchemy import CheckConstraint, Date, DateTime, ForeignKey, Index, String, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.appointment import Appointment
@@ -32,6 +32,10 @@ class Visit(Base):
     visit_date: Mapped[date] = mapped_column(Date)
     queue_number: Mapped[int]
     status: Mapped[str] = mapped_column(String(20), default="waiting")
+    # Set by the server when each step happens, never entered by hand.
+    checked_in_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    consult_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    consult_ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     appointment: Mapped[Appointment | None] = relationship()
 

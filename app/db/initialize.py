@@ -179,6 +179,10 @@ def upgrade_booking_schema(
         connection.execute(text(
             "ALTER TABLE appointments ADD COLUMN IF NOT EXISTS cancelled_by_clinic BOOLEAN NOT NULL DEFAULT false"
         ))
+        for column in ("checked_in_at", "consult_started_at", "consult_ended_at"):
+            connection.execute(text(f"ALTER TABLE visits ADD COLUMN IF NOT EXISTS {column} TIMESTAMP WITH TIME ZONE"))
+        # New tables such as session_arrivals.
+        Base.metadata.create_all(bind=connection)
         _upgrade_appointment_numbers(connection, timezone)
         if purge_clinical_data:
             connection.execute(text("ALTER TABLE appointments DROP COLUMN IF EXISTS reason"))

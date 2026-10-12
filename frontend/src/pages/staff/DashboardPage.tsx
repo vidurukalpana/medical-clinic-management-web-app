@@ -15,7 +15,8 @@ import {
 } from "lucide-react";
 import { api, type Dashboard, type DashboardAction, type DashboardVisit, type DoctorQueue } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
-import { formatDay, formatTime, greeting } from "../../lib/time";
+import { formatDay, formatDuration, formatTime, greeting, minutesBetween } from "../../lib/time";
+import { useNow } from "../../lib/hooks";
 import { Avatar, Button, Card, EmptyState, ErrorNote, Spinner, StatusBadge } from "../../components/ui";
 import { useToast } from "../../components/Toast";
 import { DoctorSelect, QuickActionButtons } from "./QuickActions";
@@ -94,7 +95,69 @@ function StatTile({ label, value, icon, tone, hint }: {
 const queueLabel = (visit: DashboardVisit) =>
   String(visit.appointment_number ?? visit.queue_number).padStart(2, "0");
 
+/** The doctor's session today: arrival time, or a button to record it. */
+function SessionBar({ queue }: { queue: DoctorQueue }) {
+  const queryClient = useQueryClient();
+  const toast = useToast();
+  const arrive = useMutation({
+    mutationFn: () => api.markDoctorArrived(queue.doctor_id, queue.session!.start_at),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      toast(`${queue.doctor_name} marked as arrived`);
+    },
+    onError: (error) => toast((error as Error).message, "error"),
+  });
+  if (!queue.session) return <div className="session-bar muted small">No more sessions today</div>;
+  const { start_at, end_at, doctor_arrived_at } = queue.session;
+  return (
+    <div className="session-bar">
+      <span className="small">
+        {formatTime(start_at)} – {formatTime(end_at)} session
+      </span>
+      {doctor_arrived_at ? (
+        <span className="chip chip-green">Doctor in since {formatTime(doctor_arrived_at)}</span>
+      ) : (
+        <Button size="sm" variant="secondary" icon={<LogIn size={14} />} loading={arrive.isPending} onClick={() => arrive.mutate()}>
+          Doctor arrived
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function SeenToday({ seen }: { seen: DoctorQueue["seen"] }) {
+  if (!seen.length) return null;
+  const durations = seen
+    .filter((visit) => visit.consult_started_at && visit.consult_ended_at)
+    .map((visit) => minutesBetween(visit.consult_started_at!, visit.consult_ended_at!));
+  const average = durations.length ? Math.round(durations.reduce((sum, value) => sum + value, 0) / durations.length) : null;
+  return (
+    <details className="queue-seen">
+      <summary>
+        Seen today · {seen.length}
+        {average !== null && <span className="muted"> · about {formatDuration(average)} each</span>}
+      </summary>
+      <ul>
+        {seen.map((visit) => (
+          <li key={visit.id}>
+            <span className="queue-num-sm">{visit.appointment_number ?? "—"}</span>
+            <span className="queue-seen-name">{visit.patient_name}</span>
+            <span className="muted small">
+              {visit.consult_started_at && visit.consult_ended_at
+                ? `${formatTime(visit.consult_started_at)}–${formatTime(visit.consult_ended_at)} · ${formatDuration(
+                    minutesBetween(visit.consult_started_at, visit.consult_ended_at),
+                  )}`
+                : "Time not recorded"}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
 function QueueColumn({ queue, index }: { queue: DoctorQueue; index: number }) {
+  const now = useNow();
   const current = queue.patients.filter((visit) => visit.status === "in_progress");
   const waiting = queue.patients.filter((visit) => visit.status === "waiting");
   return (
@@ -109,6 +172,7 @@ function QueueColumn({ queue, index }: { queue: DoctorQueue; index: number }) {
           </span>
         </div>
       </header>
+      <SessionBar queue={queue} />
 
       {current.map((visit) => (
         <div key={visit.id} className="now-serving">
@@ -119,7 +183,13 @@ function QueueColumn({ queue, index }: { queue: DoctorQueue; index: number }) {
             <span className="queue-token">{queueLabel(visit)}</span>
             <div>
               <strong>{visit.patient_name}</strong>
-              <span className="muted small">{visit.start_at ? `${formatTime(visit.start_at)} session` : "Walk-in"}</span>
+              <span className="muted small">
+                {visit.consult_started_at
+                  ? `With doctor since ${formatTime(visit.consult_started_at)} · ${formatDuration(minutesBetween(visit.consult_started_at, now))}`
+                  : visit.start_at
+                    ? `${formatTime(visit.start_at)} session`
+                    : "Walk-in"}
+              </span>
             </div>
           </div>
           <ActionButtons actions={visit.actions} subject={visit.patient_name} />
@@ -139,7 +209,11 @@ function QueueColumn({ queue, index }: { queue: DoctorQueue; index: number }) {
               <div className="queue-item-main">
                 <strong>{visit.patient_name}</strong>
                 <span className="muted small">
-                  {visit.start_at ? `${formatTime(visit.start_at)} session` : "Walk-in"}
+                  {visit.checked_in_at
+                    ? `Checked in ${formatTime(visit.checked_in_at)} · waiting ${formatDuration(minutesBetween(visit.checked_in_at, now))}`
+                    : visit.start_at
+                      ? `${formatTime(visit.start_at)} session`
+                      : "Walk-in"}
                   {position === 0 && current.length === 0 ? " · next up" : ""}
                 </span>
               </div>
@@ -148,6 +222,7 @@ function QueueColumn({ queue, index }: { queue: DoctorQueue; index: number }) {
           ))}
         </ol>
       )}
+      <SeenToday seen={queue.seen} />
     </div>
   );
 }

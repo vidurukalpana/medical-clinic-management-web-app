@@ -83,6 +83,16 @@ export function usePatientName(patientId: number) {
   return query.data?.full_name;
 }
 
+/** The current time, refreshed every `intervalMs` so elapsed times keep ticking. */
+export function useNow(intervalMs = 30_000): number {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), intervalMs);
+    return () => window.clearInterval(timer);
+  }, [intervalMs]);
+  return now;
+}
+
 export function useDebounced<T>(value: T, delay = 300): T {
   const [debounced, setDebounced] = useState(value);
   useEffect(() => {

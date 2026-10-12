@@ -567,3 +567,58 @@ def test_cancelling_a_session_lets_patients_move(client, opd, test_settings):
     assert client.patch(f"/api/visits/{in_room['id']}", headers=headers, json={"status": "in_progress"}).status_code == 200
     assert client.post(f"/api/doctors/{other_id}/sessions/cancel", headers=headers,
                        json={"start_at": monday}).status_code == 409
+
+
+def test_doctor_arrival_and_consultation_times_are_recorded(client, opd, monkeypatch, test_settings):
+    headers, doctors, patients = opd
+    doctor_id, other_id = doctors[0]["id"], doctors[1]["id"]
+    zone = ZoneInfo(test_settings.timezone)
+    clock = {"now": datetime(2030, 1, 7, 8, 50, tzinfo=zone)}
+
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return clock["now"].astimezone(tz)
+    monkeypatch.setattr(visits, "datetime", Clock)
+    session_start = "2030-01-07T09:00:00+05:30"
+
+    doctor_headers, body = login(client, "doctor1", configured_password(test_settings.doctor_one_password))
+    not_own = doctor_id if body["user"]["doctor"]["id"] != doctor_id else other_id
+    assert client.post(f"/api/doctors/{not_own}/sessions/arrive", headers=doctor_headers,
+                       json={"start_at": session_start}).status_code == 403
+    url = f"/api/doctors/{doctor_id}/sessions/arrive"
+    assert client.post(url, headers=headers, json={"start_at": "2030-01-07T10:00:00+05:30"}).status_code == 404
+    arrived = client.post(url, headers=headers, json={"start_at": session_start})
+    assert arrived.status_code == 200
+    assert datetime.fromisoformat(arrived.json()["doctor_arrived_at"]) == clock["now"]
+    clock["now"] = datetime(2030, 1, 7, 9, 5, tzinfo=zone)
+    # The first arrival is kept.
+    assert datetime.fromisoformat(client.post(url, headers=headers, json={"start_at": session_start})
+                                  .json()["doctor_arrived_at"]) == datetime(2030, 1, 7, 8, 50, tzinfo=zone)
+
+    visit = walk_in(client, headers, doctor_id, patients[0]).json()
+    assert datetime.fromisoformat(visit["checked_in_at"]) == clock["now"]
+    clock["now"] = datetime(2030, 1, 7, 9, 12, tzinfo=zone)
+    started = client.patch(f"/api/visits/{visit['id']}", headers=headers, json={"status": "in_progress"}).json()
+    assert datetime.fromisoformat(started["consult_started_at"]) == clock["now"]
+    assert started["consult_ended_at"] is None
+    clock["now"] = datetime(2030, 1, 7, 9, 21, tzinfo=zone)
+    done = client.patch(f"/api/visits/{visit['id']}", headers=headers, json={"status": "completed"}).json()
+    assert datetime.fromisoformat(done["consult_ended_at"]) == clock["now"]
+    # Times cannot be set by hand.
+    assert client.patch(f"/api/visits/{visit['id']}", headers=headers,
+                        json={"consult_started_at": "2030-01-07T08:00:00+05:30"}).status_code == 422
+
+    queue = next(q for q in client.get("/api/dashboard", headers=headers).json()["doctor_queues"]
+                 if q["doctor_id"] == doctor_id)
+    assert datetime.fromisoformat(queue["session"]["doctor_arrived_at"]) == datetime(2030, 1, 7, 8, 50, tzinfo=zone)
+    assert [(s["patient_name"], datetime.fromisoformat(s["consult_ended_at"]).minute) for s in queue["seen"]] == [
+        ("First Patient", 21),
+    ]
+
+    # Starting a patient records the arrival if nobody pressed the button.
+    other_visit = walk_in(client, headers, other_id, patients[1]).json()
+    client.patch(f"/api/visits/{other_visit['id']}", headers=headers, json={"status": "in_progress"})
+    live = {s["doctor_id"]: s for s in client.get("/api/live-queue").json()["sessions"]}
+    assert datetime.fromisoformat(live[other_id]["doctor_arrived_at"]) == clock["now"]
+    assert live[doctor_id]["status"] == "in_progress"

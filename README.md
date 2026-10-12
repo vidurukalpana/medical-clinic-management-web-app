@@ -323,6 +323,9 @@ Patients can change their password and log out. They cannot use staff patient, s
 - `GET /api/doctors/{doctor_id}/queue` returns the assigned doctor's queue; optional `day` defaults to the clinic-local date.
 - `GET /api/visits/{visit_id}` returns an authorized visit.
 - `PATCH /api/visits/{visit_id}` accepts only `status`.
+- `POST /api/doctors/{doctor_id}/sessions/arrive` with `{"start_at": "...today's session start..."}` records when the doctor arrived for that session. The first time recorded is kept. Starting the first patient also records it if no one did.
+
+The server records times when each step happens, and they cannot be set through the API. A visit gets `checked_in_at` when the patient joins the queue, `consult_started_at` when it moves to `in_progress`, and `consult_ended_at` when it is completed or cancelled from `in_progress`. The dashboard shows, for each doctor, today's current or next session with `doctor_arrived_at`, and a `seen` list of today's completed visits with their times. The live queue shows `doctor_arrived_at` as well.
 
 Visits move from `waiting` to `in_progress` to `completed`. Waiting or in-progress visits may be cancelled. Completed/cancelled visits cannot be edited. Completing or cancelling a visit also updates its appointment. Checked-in bookings must be managed through the staff visit workflow.
 

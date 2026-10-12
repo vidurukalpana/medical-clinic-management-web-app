@@ -104,6 +104,19 @@ export function formatClock(value: string): string {
   return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${suffix}`;
 }
 
+/** Whole minutes from `from` to `to` (default now), never negative. */
+export function minutesBetween(from: string, to: string | number = Date.now()): number {
+  const end = typeof to === "number" ? to : Date.parse(to);
+  return Math.max(0, Math.floor((end - Date.parse(from)) / 60_000));
+}
+
+/** 8 → "8 min", 65 → "1 h 5 min" */
+export function formatDuration(minutes: number): string {
+  if (minutes < 60) return `${minutes} min`;
+  const rest = minutes % 60;
+  return `${Math.floor(minutes / 60)} h${rest ? ` ${rest} min` : ""}`;
+}
+
 export function greeting(): string {
   const hour = Number(parts(new Date()).hour);
   if (hour < 12) return "Good morning";

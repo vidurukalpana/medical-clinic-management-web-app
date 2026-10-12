@@ -123,6 +123,10 @@ export interface Visit {
   start_at: string | null;
   end_at: string | null;
   status: VisitStatus;
+  /** Recorded by the server when each step happens. */
+  checked_in_at: string | null;
+  consult_started_at: string | null;
+  consult_ended_at: string | null;
 }
 export interface DashboardAction {
   label: string;
@@ -140,13 +144,27 @@ export interface DashboardVisit extends Visit {
   patient_name: string;
   actions: DashboardAction[];
 }
+export interface QueueSession extends SessionTime {
+  doctor_arrived_at: string | null;
+}
+export interface SeenVisit {
+  id: number;
+  appointment_number: number | null;
+  patient_name: string;
+  consult_started_at: string | null;
+  consult_ended_at: string | null;
+}
 export interface DoctorQueue {
   doctor_id: number;
   doctor_name: string;
   is_active: boolean;
   waiting_count: number;
   in_progress_count: number;
+  /** The current or next session today. */
+  session: QueueSession | null;
   patients: DashboardVisit[];
+  /** Completed today, most recent first. */
+  seen: SeenVisit[];
 }
 export interface Dashboard {
   day: string;
@@ -188,6 +206,7 @@ export interface LiveSession extends SessionTime {
   doctor_id: number;
   doctor_name: string;
   status: "not_started" | "in_progress" | "ended" | "unavailable";
+  doctor_arrived_at: string | null;
   now_serving: number | null;
   numbers_to_see: number[];
 }
@@ -388,6 +407,11 @@ export const api = {
     request<Appointment>(`/appointments/${id}/reschedule`, { method: "PUT", body: { start_at } }),
   noShowAppointment: (id: number) => request<Appointment>(`/appointments/${id}/no-show`, { method: "PUT" }),
   checkIn: (id: number) => request<Visit>(`/appointments/${id}/check-in`, { method: "POST", body: {} }),
+  markDoctorArrived: (doctorId: number, start_at: string) =>
+    request<{ start_at: string; doctor_arrived_at: string }>(`/doctors/${doctorId}/sessions/arrive`, {
+      method: "POST",
+      body: { start_at },
+    }),
   walkIn: (doctor_id: number, patient_id: number) =>
     request<Visit>("/visits/walk-in", { method: "POST", body: { doctor_id, patient_id } }),
 
