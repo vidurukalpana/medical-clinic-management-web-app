@@ -13,6 +13,7 @@ import { PatientsPage } from "./pages/staff/PatientsPage";
 import { SchedulePage } from "./pages/staff/SchedulePage";
 import { DoctorsPage, UsersPage } from "./pages/staff/AdminPages";
 import { AccountPage } from "./pages/staff/AccountPage";
+import { CheckInPage } from "./pages/staff/CheckInPage";
 import { useAuth } from "./lib/auth";
 import { EmptyState } from "./components/ui";
 
@@ -53,6 +54,7 @@ export default function App() {
         <Route path="appointments" element={<AppointmentsPage />} />
         <Route path="patients" element={<PatientsPage />} />
         <Route path="schedule" element={<SchedulePage />} />
+        <Route path="check-in" element={<CheckInPage />} />
         <Route path="account" element={<AccountPage />} />
         <Route path="doctors" element={<AdminOnly><DoctorsPage /></AdminOnly>} />
         <Route path="users" element={<AdminOnly><UsersPage /></AdminOnly>} />

@@ -23,6 +23,8 @@ import { describeWeek, matchesSearch } from "../../lib/doctors";
 import { saveBooking } from "../../lib/savedBookings";
 import { clinicDate, formatDay, formatTime, liveQueueLink } from "../../lib/time";
 import { SessionPicker } from "../../components/SessionPicker";
+import { CheckInQr } from "../../components/CheckInQr";
+import { formatCheckinCode } from "../../lib/checkin";
 import { Avatar, Button, EmptyState, ErrorNote, Field, Spinner } from "../../components/ui";
 import { useToast } from "../../components/Toast";
 
@@ -302,6 +304,7 @@ function Confirmation({ booking, doctor, remembered }: {
       `Your number: ${booking.appointment_number}`,
       `Doctor: ${doctor?.display_name ?? booking.doctor_id}`,
       `When: ${formatDay(day)}, session starts ${formatTime(booking.start_at)}`,
+      `Check-in code (show at reception): ${formatCheckinCode(booking.checkin_code)}`,
       `Private code: ${booking.management_token}`,
       "",
       "Keep this code private. It lets anyone view, move or cancel this booking.",
@@ -338,6 +341,8 @@ function Confirmation({ booking, doctor, remembered }: {
           </div>
         </div>
         <p className="muted small">Patients are seen in number order. Please arrive a little before the session starts.</p>
+
+        <CheckInQr code={booking.checkin_code} />
 
         <div className="token-box">
           <div className="token-head">

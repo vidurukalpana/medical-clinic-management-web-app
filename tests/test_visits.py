@@ -653,3 +653,44 @@ def test_doctor_cannot_leave_before_arriving(client, opd):
     headers, doctors, _ = opd
     assert client.post(f"/api/doctors/{doctors[0]['id']}/sessions/leave", headers=headers,
                        json={"start_at": "2030-01-07T09:00:00+05:30"}).status_code == 409
+
+
+def test_check_in_by_qr_code(client, opd, test_settings):
+    headers, doctors, patients = opd
+    doctor_id, other_id = doctors[0]["id"], doctors[1]["id"]
+    guest = client.post("/api/guest/appointments", json={
+        "doctor_id": doctor_id, "start_at": "2030-01-07T09:00:00+05:30",
+        "full_name": "Online Patient", "phone": "0771234567",
+    }).json()
+    code = guest["checkin_code"]
+    assert len(code) == 10 and code.isalnum()
+
+    # People may type it formatted or in lower case.
+    for sent in (code, f"{code[:5]}-{code[5:]}".lower(), f"{code[:5]} {code[5:]}"):
+        found = client.get(f"/api/check-in/{sent}", headers=headers)
+        assert found.status_code == 200, sent
+    found = found.json()
+    assert (found["patient_name"], found["appointment_number"], found["can_check_in"], found["problem"]) == (
+        "Online Patient", 1, True, None,
+    )
+    assert found["appointment_id"] == guest["id"]
+    assert client.get(f"/api/check-in/{code}").status_code == 401
+    assert client.get("/api/check-in/NOTACODE00", headers=headers).status_code == 404
+    doctor_headers, body = login(client, "doctor1", configured_password(test_settings.doctor_one_password))
+    own = body["user"]["doctor"]["id"]
+    assert client.get(f"/api/check-in/{code}", headers=doctor_headers).status_code == (200 if own == doctor_id else 403)
+
+    assert client.post(f"/api/appointments/{guest['id']}/check-in", headers=headers, json={}).status_code == 201
+    again = client.get(f"/api/check-in/{code}", headers=headers).json()
+    assert (again["can_check_in"], again["problem"], again["queue_number"]) == (False, "Already checked in as queue No. 1.", 1)
+
+    later = client.post("/api/appointments", headers=headers, json={
+        "doctor_id": other_id, "patient_id": patients[0], "start_at": "2030-01-08T09:00:00+05:30",
+    }).json()
+    assert client.get(f"/api/check-in/{later['checkin_code']}", headers=headers).json()["problem"] == (
+        "This booking is for Tuesday 08 January, not today."
+    )
+    client.put(f"/api/appointments/{later['id']}/cancel", headers=headers)
+    assert client.get(f"/api/check-in/{later['checkin_code']}", headers=headers).json()["problem"] == (
+        "This booking was cancelled."
+    )

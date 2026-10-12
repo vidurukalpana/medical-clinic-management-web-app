@@ -8,6 +8,7 @@ from app.errors import ForbiddenError
 from app.errors.visits import save_visit
 from app.models import Doctor, User, UserRole, Visit
 from app.routers.appointments import AppSettings, ManagedAppointment
+from app.schemas.appointment import CheckInLookup
 from app.schemas.visit import (
     DashboardRead, LiveQueueRead, SessionArrivalRead, SessionArrive, VisitCheckIn, VisitRead, VisitUpdate,
     WalkInCreate,
@@ -127,3 +128,12 @@ def mark_doctor_left(
     doctor = appointments.get_booking_doctor(db, doctor_id, lock=True)
     require_visit_manager(doctor, user)
     return visits.mark_doctor_left(db, doctor, data.start_at, settings.timezone)
+
+
+@router.get("/check-in/{code}", response_model=CheckInLookup)
+def look_up_check_in_code(
+    code: str, user: CurrentUser, db: DatabaseSession, settings: AppSettings, response: Response,
+) -> CheckInLookup:
+    """Staff only: find a booking from the code in the patient's QR, and whether it can be checked in now."""
+    response.headers["Cache-Control"] = "no-store"
+    return visits.find_by_checkin_code(db, code, user, settings.timezone)

@@ -436,7 +436,7 @@ def test_schema_upgrade_moves_slot_bookings_into_numbered_sessions(client, booki
                 "ALTER TABLE availability DROP COLUMN max_patients, "
                 "ADD COLUMN slot_duration_minutes INTEGER NOT NULL DEFAULT 15"
             ))
-            connection.execute(text("ALTER TABLE appointments DROP COLUMN appointment_number"))
+            connection.execute(text("ALTER TABLE appointments DROP COLUMN appointment_number, DROP COLUMN checkin_code"))
             connection.execute(text(
                 "CREATE UNIQUE INDEX uq_appointment_doctor_start ON appointments (doctor_id, start_at) "
                 "WHERE status <> 'cancelled'"
@@ -454,10 +454,12 @@ def test_schema_upgrade_moves_slot_bookings_into_numbered_sessions(client, booki
             rows = connection.execute(text(
                 "SELECT start_at, end_at, appointment_number, status FROM appointments ORDER BY id"
             )).all()
+            codes = connection.execute(text("SELECT checkin_code FROM appointments")).scalars().all()
             max_patients = connection.execute(text("SELECT max_patients FROM availability")).scalar_one()
     finally:
         dependency.close()
 
+    assert len(set(codes)) == len(codes) == 4 and all(len(code) == 10 for code in codes)
     # 09:00-10:00 in 15-minute slots held four patients.
     assert max_patients == 4
     assert [(row.start_at, row.appointment_number, row.status) for row in rows] == [

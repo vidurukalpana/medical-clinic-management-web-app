@@ -8,6 +8,8 @@ from app.errors import BadRequestError, ConflictError, DoctorFullyBookedError, F
 from app.models import (
     Appointment, Availability, Doctor, DoctorUnavailability, Patient, SessionArrival, User, UserRole, Visit,
 )
+from app.models.appointment import normalize_checkin_code
+from app.schemas.appointment import CheckInLookup
 from app.schemas.visit import (
     DashboardAction, DashboardAppointment, DashboardRead, DashboardSummary,
     DashboardVisit, DoctorQueue, LiveQueueRead, LiveSession, QueueSession, SeenVisit,
@@ -186,7 +188,7 @@ def dashboard(
         appointment_items.append(DashboardAppointment(
             **{key: getattr(appointment, key) for key in
                ("id", "doctor_id", "patient_id", "start_at", "end_at", "appointment_number", "status",
-                "cancelled_by_clinic")},
+                "cancelled_by_clinic", "checkin_code")},
             patient_name=patient_name, doctor_name=doctor_names[appointment.doctor_id],
             visit_id=visit_id, actions=actions,
         ))
@@ -419,3 +421,36 @@ def mark_doctor_left(
         arrival.left_at = datetime.now(timezone.utc)
         db.commit()
     return _attendance_read(arrival)
+
+
+def find_by_checkin_code(db: Session, code: str, user: User, clinic_timezone: str) -> CheckInLookup:
+    appointment = db.scalar(select(Appointment).where(Appointment.checkin_code == normalize_checkin_code(code)))
+    if appointment is None:
+        raise NotFoundError("Booking for this check-in code")
+    doctor = db.get(Doctor, appointment.doctor_id)
+    if user.role == UserRole.DOCTOR and doctor.user_id != user.id:
+        raise ForbiddenError("This booking is for another doctor.")
+    visit = db.scalar(select(Visit).where(Visit.appointment_id == appointment.id))
+    zone = ZoneInfo(clinic_timezone)
+    day = appointment.start_at.astimezone(zone).date()
+    if appointment.status == "cancelled":
+        problem = ("The clinic cancelled this session. The booking can be moved to another date."
+                   if appointment.cancelled_by_clinic else "This booking was cancelled.")
+    elif appointment.status == "no_show":
+        problem = "This booking was marked as a no-show."
+    elif appointment.status == "completed" or visit is not None:
+        problem = f"Already checked in{f' as queue No. {visit.queue_number}' if visit else ''}."
+    elif day != clinic_today(clinic_timezone):
+        problem = f"This booking is for {day:%A %d %B}, not today."
+    elif not doctor.is_active:
+        problem = "The doctor is inactive."
+    else:
+        problem = None
+    return CheckInLookup(
+        appointment_id=appointment.id, appointment_number=appointment.appointment_number,
+        status=appointment.status, patient_name=db.get(Patient, appointment.patient_id).full_name,
+        doctor_id=doctor.id, doctor_name=doctor.display_name,
+        start_at=appointment.start_at, end_at=appointment.end_at,
+        visit_id=visit.id if visit else None, queue_number=visit.queue_number if visit else None,
+        can_check_in=problem is None, problem=problem,
+    )

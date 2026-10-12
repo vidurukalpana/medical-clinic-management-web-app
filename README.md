@@ -319,6 +319,9 @@ Patients can change their password and log out. They cannot use staff patient, s
 `POST /api/appointments` accepts `doctor_id`, `patient_id`, and the timezone-aware `start_at` of a session. It requires an administrator or the assigned doctor. The same permissions apply to reading, cancelling and rescheduling through `/api/appointments/{appointment_id}`.
 
 - `POST /api/appointments/{appointment_id}/check-in` accepts `{}` on the clinic-local appointment date.
+- `GET /api/check-in/{code}` (staff only) finds a booking from its `checkin_code`, ignoring case, spaces and dashes. It returns the patient, doctor, number and session, `can_check_in`, and a `problem` such as "This booking is for Tuesday 08 January, not today." Doctors can look up only their own bookings.
+
+Every booking has a random 10-character `checkin_code`. Patients see it as a QR code on the booking confirmation and on their booking tickets. The QR links to `/staff/check-in?code=…`, so reception can scan it with a phone camera, a handheld scanner, or the computer camera from **Scan check-in** on the dashboard. The code is separate from the private management code. On its own it does nothing: the lookup requires a staff login.
 - `POST /api/visits/walk-in` accepts `doctor_id` and `patient_id` and gives the patient the next free number in today's earliest open session.
 - `GET /api/doctors/{doctor_id}/queue` returns the assigned doctor's queue; optional `day` defaults to the clinic-local date.
 - `GET /api/visits/{visit_id}` returns an authorized visit.
@@ -434,6 +437,7 @@ erDiagram
         datetime start_at
         datetime end_at
         int appointment_number
+        string checkin_code UK
         string guest_token_hash
         int booked_by_user_id FK
         string status

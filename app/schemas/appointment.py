@@ -38,6 +38,7 @@ class AppointmentRead(SessionTime):
     appointment_number: int
     status: Literal["scheduled", "completed", "cancelled", "no_show"]
     cancelled_by_clinic: bool
+    checkin_code: str
 
 
 class BookingStatus(BaseModel):
@@ -62,6 +63,7 @@ class GuestBookingRead(SessionTime):
     appointment_number: int
     status: Literal["scheduled", "completed", "cancelled", "no_show"]
     cancelled_by_clinic: bool
+    checkin_code: str
 
 
 class GuestBookingConfirmation(GuestBookingRead):
@@ -73,3 +75,21 @@ class AppointmentPage(BaseModel):
     total: int
     offset: int
     limit: int
+
+
+class CheckInLookup(BaseModel):
+    """What reception sees after scanning a booking's QR code."""
+
+    appointment_id: int
+    appointment_number: int
+    status: Literal["scheduled", "completed", "cancelled", "no_show"]
+    patient_name: str
+    doctor_id: int
+    doctor_name: str
+    start_at: datetime
+    end_at: datetime
+    visit_id: int | None
+    queue_number: int | None
+    can_check_in: bool
+    # Why the booking cannot be checked in, in words reception can say to the patient.
+    problem: str | None

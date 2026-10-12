@@ -1,9 +1,23 @@
 from datetime import datetime
+from secrets import choice
 
 from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
+
+
+# No 0/O, 1/I/L, so a code read aloud or typed from a printout is unambiguous.
+CHECKIN_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"
+
+
+def new_checkin_code() -> str:
+    return "".join(choice(CHECKIN_ALPHABET) for _ in range(10))
+
+
+def normalize_checkin_code(value: str) -> str:
+    """Accept "k7m2p-qx9rt" or "K7M2P QX9RT" as typed or read from a printout."""
+    return "".join(char for char in value.upper() if char.isalnum())
 
 
 class Appointment(Base):
@@ -33,3 +47,5 @@ class Appointment(Base):
     status: Mapped[str] = mapped_column(String(20), default="scheduled")
     # Set when staff cancel the whole session; the patient may then move the booking.
     cancelled_by_clinic: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    # Shown to the patient as a QR code; on its own it only lets signed-in staff find the booking.
+    checkin_code: Mapped[str] = mapped_column(String(12), unique=True, default=new_checkin_code)

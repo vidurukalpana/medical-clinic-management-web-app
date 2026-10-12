@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { CalendarPlus, Footprints, UserPlus } from "lucide-react";
+import { CalendarPlus, Footprints, ScanLine, UserPlus } from "lucide-react";
 import { api, type Gender, type Patient, type PatientInput } from "../../lib/api";
 import { useStaffDoctors } from "../../lib/hooks";
 import { clinicDate, formatDay, formatTime } from "../../lib/time";
@@ -8,6 +8,7 @@ import { PatientPicker } from "../../components/PatientPicker";
 import { SessionPicker } from "../../components/SessionPicker";
 import { Button, ErrorNote, Field, Modal } from "../../components/ui";
 import { useToast } from "../../components/Toast";
+import { CheckInPanel } from "./CheckInPanel";
 
 const EMPTY_PATIENT: PatientInput = {
   full_name: "",
@@ -323,7 +324,7 @@ export function WalkInModal({ open, onClose, initialPatient }: {
 }
 
 export function QuickActionButtons() {
-  const [modal, setModal] = useState<"register" | "book" | "walkin" | null>(null);
+  const [modal, setModal] = useState<"register" | "book" | "walkin" | "scan" | null>(null);
   const close = () => setModal(null);
   return (
     <>
@@ -349,10 +350,20 @@ export function QuickActionButtons() {
           <strong>Add walk-in</strong>
           <small>Next number in today's session</small>
         </button>
+        <button className="quick-action qa-blue" onClick={() => setModal("scan")}>
+          <span>
+            <ScanLine size={20} />
+          </span>
+          <strong>Scan check-in</strong>
+          <small>From the patient's QR code</small>
+        </button>
       </div>
       <RegisterPatientModal open={modal === "register"} onClose={close} />
       <BookAppointmentModal open={modal === "book"} onClose={close} />
       <WalkInModal open={modal === "walkin"} onClose={close} />
+      <Modal open={modal === "scan"} title="Scan check-in" onClose={close} wide>
+        {modal === "scan" && <CheckInPanel />}
+      </Modal>
     </>
   );
 }

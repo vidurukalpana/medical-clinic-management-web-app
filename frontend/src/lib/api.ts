@@ -78,6 +78,8 @@ export interface Appointment extends SessionTime {
   status: AppointmentStatus;
   /** Staff cancelled the whole session; the booking can be moved to another session. */
   cancelled_by_clinic: boolean;
+  /** Shown to the patient as a QR code for reception. */
+  checkin_code: string;
 }
 export interface GuestBooking extends SessionTime {
   id: number;
@@ -85,6 +87,20 @@ export interface GuestBooking extends SessionTime {
   appointment_number: number;
   status: AppointmentStatus;
   cancelled_by_clinic: boolean;
+  checkin_code: string;
+}
+export interface CheckInLookup extends SessionTime {
+  appointment_id: number;
+  appointment_number: number;
+  status: AppointmentStatus;
+  patient_name: string;
+  doctor_id: number;
+  doctor_name: string;
+  visit_id: number | null;
+  queue_number: number | null;
+  can_check_in: boolean;
+  /** Why the booking can't be checked in now, in words to tell the patient. */
+  problem: string | null;
 }
 export interface SessionCancellation extends SessionTime {
   affected: { appointment_id: number; appointment_number: number; patient_name: string; phone: string }[];
@@ -413,6 +429,7 @@ export const api = {
   rescheduleAppointment: (id: number, start_at: string) =>
     request<Appointment>(`/appointments/${id}/reschedule`, { method: "PUT", body: { start_at } }),
   noShowAppointment: (id: number) => request<Appointment>(`/appointments/${id}/no-show`, { method: "PUT" }),
+  checkInLookup: (code: string) => request<CheckInLookup>(`/check-in/${encodeURIComponent(code)}`),
   checkIn: (id: number) => request<Visit>(`/appointments/${id}/check-in`, { method: "POST", body: {} }),
   markDoctorArrived: (doctorId: number, start_at: string) =>
     request<SessionAttendance>(`/doctors/${doctorId}/sessions/arrive`, { method: "POST", body: { start_at } }),
