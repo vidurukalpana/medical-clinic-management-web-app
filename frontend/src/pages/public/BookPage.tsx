@@ -19,7 +19,7 @@ import { api, type BookingSession, type GuestBookingConfirmation, type PublicDoc
 import { useAuth } from "../../lib/auth";
 import { usePublicDoctors } from "../../lib/hooks";
 import { saveBooking } from "../../lib/savedBookings";
-import { clinicDate, formatDay, formatTime } from "../../lib/time";
+import { clinicDate, formatDay, formatTime, liveQueueLink } from "../../lib/time";
 import { SessionPicker } from "../../components/SessionPicker";
 import { Avatar, Button, EmptyState, ErrorNote, Field, Spinner } from "../../components/ui";
 import { useToast } from "../../components/Toast";
@@ -340,6 +340,11 @@ function Confirmation({ booking, doctor, remembered }: {
           <Link to={`/manage?id=${booking.id}`} className="btn btn-primary">
             Manage this booking
           </Link>
+          {day === clinicDate() && (
+            <Link to={liveQueueLink(booking)} className="btn btn-secondary">
+              See live queue
+            </Link>
+          )}
           <Link to="/" className="btn btn-ghost">
             Back to home
           </Link>

@@ -158,6 +158,19 @@ export interface Unavailability {
   reason: string | null;
 }
 export type UnavailabilityInput = Omit<Unavailability, "id" | "doctor_id">;
+/** Public progress of one of today's sessions: numbers only, never patient details. */
+export interface LiveSession extends SessionTime {
+  doctor_id: number;
+  doctor_name: string;
+  status: "not_started" | "in_progress" | "ended" | "unavailable";
+  now_serving: number | null;
+  numbers_to_see: number[];
+}
+export interface LiveQueue {
+  day: string;
+  generated_at: string;
+  sessions: LiveSession[];
+}
 export interface ClinicContactDetails {
   name: string;
   address_lines: string[];
@@ -294,6 +307,7 @@ export const api = {
   // Sessions
   sessions: (doctorId: number, day: string) =>
     request<BookingSession[]>(`/doctors/${doctorId}/sessions`, { query: { day }, auth: false }),
+  liveQueue: () => request<LiveQueue>("/live-queue", { auth: false }),
   bookingStatus: (doctorId: number, day: string) =>
     request<BookingStatus>(`/doctors/${doctorId}/booking-status`, { query: { day }, auth: false }),
 

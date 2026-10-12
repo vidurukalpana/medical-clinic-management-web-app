@@ -57,6 +57,7 @@ export function PublicLayout() {
               Home
             </NavLink>
             <NavLink to="/book">Book a visit</NavLink>
+            <NavLink to="/live">Live queue</NavLink>
             <NavLink to="/manage">Manage booking</NavLink>
             {user?.role === "patient" && <NavLink to="/my-bookings">My bookings</NavLink>}
             {isStaff && <NavLink to="/staff">Staff portal</NavLink>}

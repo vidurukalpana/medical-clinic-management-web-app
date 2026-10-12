@@ -456,3 +456,47 @@ def test_dashboard_empty_day_and_inactive_doctor(client, opd):
     inactive = next(q for q in dashboard["doctor_queues"] if q["doctor_id"] == doctors[0]["id"])
     assert inactive["is_active"] is False
     assert inactive["patients"] == []
+
+
+def test_live_queue_shows_numbers_only(client, opd, monkeypatch, test_settings):
+    headers, doctors, patients = opd
+    doctor_id, other_id = doctors[0]["id"], doctors[1]["id"]
+
+    def live():
+        response = client.get("/api/live-queue")
+        assert response.status_code == 200
+        assert response.headers["cache-control"] == "no-store"
+        assert "Patient" not in response.text and "patient_id" not in response.text
+        return {item["doctor_id"]: item for item in response.json()["sessions"]}
+
+    assert {d: (s["status"], s["now_serving"], s["numbers_to_see"]) for d, s in live().items()} == {
+        doctor_id: ("not_started", None, []), other_id: ("not_started", None, []),
+    }
+    booked = client.post("/api/appointments", headers=headers, json={
+        "doctor_id": doctor_id, "patient_id": patients[0], "start_at": "2030-01-07T09:00:00+05:30",
+    }).json()
+    walk_in(client, headers, doctor_id, patients[1])
+    assert live()[doctor_id]["numbers_to_see"] == [1, 2]
+
+    visit = client.post(f"/api/appointments/{booked['id']}/check-in", headers=headers, json={}).json()
+    url = f"/api/visits/{visit['id']}"
+    assert client.patch(url, headers=headers, json={"status": "in_progress"}).status_code == 200
+    session = live()[doctor_id]
+    assert (session["status"], session["now_serving"], session["numbers_to_see"]) == ("in_progress", 1, [2])
+
+    # Between patients the session is still running.
+    assert client.patch(url, headers=headers, json={"status": "completed"}).status_code == 200
+    session = live()[doctor_id]
+    assert (session["status"], session["now_serving"], session["numbers_to_see"]) == ("in_progress", None, [2])
+
+    assert client.post(f"/api/doctors/{other_id}/unavailability", headers=headers, json={
+        "start_at": "2030-01-07T10:00:00+05:30", "end_at": "2030-01-07T12:00:00+05:30",
+    }).status_code == 201
+    assert live()[other_id]["status"] == "unavailable"
+
+    class Evening(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2030, 1, 7, 18, tzinfo=ZoneInfo(test_settings.timezone)).astimezone(tz)
+    monkeypatch.setattr(visits, "datetime", Evening)
+    assert live()[doctor_id]["status"] == "ended"

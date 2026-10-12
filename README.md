@@ -212,6 +212,7 @@ No login is required for these endpoints:
 | `GET /api/doctors/{doctor_id}/sessions?day=2030-01-07` | List the day's sessions with `max_patients` and `remaining` places |
 | `GET /api/doctors/{doctor_id}/booking-status?day=2030-01-07` | Check `remaining_places` across the day |
 | `POST /api/guest/appointments` | Book using name, phone, doctor and session |
+| `GET /api/live-queue` | Today's sessions: status, the number being seen and the numbers still to be seen. Numbers only, no patient details |
 
 Example guest request. `start_at` is the start of a listed session that has places left:
 

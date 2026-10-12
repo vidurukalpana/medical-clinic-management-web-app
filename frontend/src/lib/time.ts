@@ -55,6 +55,16 @@ export function addDays(day: string, amount: number): string {
   return date.toISOString().slice(0, 10);
 }
 
+/** Link to a session on the live queue page, highlighting the patient's own number. */
+export function liveQueueLink(booking: { doctor_id: number; start_at: string; appointment_number: number }): string {
+  const params = new URLSearchParams({
+    doctor: String(booking.doctor_id),
+    at: booking.start_at,
+    number: String(booking.appointment_number),
+  });
+  return `/live?${params}`;
+}
+
 /** Monday = 0 … Sunday = 6, as in Python's date.weekday(). */
 export function weekdayOf(day: string): number {
   return (new Date(`${day}T12:00:00Z`).getUTCDay() + 6) % 7;

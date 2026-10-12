@@ -1,7 +1,8 @@
 import { useState, type ReactNode } from "react";
-import { CalendarClock, Clock, Stethoscope } from "lucide-react";
+import { Link } from "react-router-dom";
+import { CalendarClock, Clock, Radio, Stethoscope } from "lucide-react";
 import type { BookingSession, GuestBooking } from "../lib/api";
-import { formatDay, formatTime, clinicDate } from "../lib/time";
+import { formatDay, formatTime, clinicDate, liveQueueLink } from "../lib/time";
 import { SessionPicker } from "./SessionPicker";
 import { Button, Modal, StatusBadge } from "./ui";
 
@@ -31,6 +32,11 @@ export function BookingTicket({ booking, doctorName, actions }: {
         <p className="muted">
           <Clock size={14} /> {formatDay(day)} · session starts {formatTime(booking.start_at)}
         </p>
+        {booking.status === "scheduled" && day === clinicDate() && (
+          <Link to={liveQueueLink(booking)} className="link-arrow small">
+            <Radio size={14} /> See where the queue is
+          </Link>
+        )}
         {actions && <div className="ticket-actions">{actions}</div>}
       </div>
     </article>
