@@ -178,6 +178,9 @@ Availability records define a doctor's weekly consulting sessions: weekday, star
 - `POST /api/doctors/{doctor_id}/unavailability` — add an unavailable period.
 - `PUT /api/doctors/{doctor_id}/unavailability/{unavailability_id}` — replace an unavailable period.
 - `DELETE /api/doctors/{doctor_id}/unavailability/{unavailability_id}` — remove an unavailable period.
+- `POST /api/doctors/{doctor_id}/sessions/cancel` with `{"start_at": "...session start...", "reason": "optional, staff only"}` — cancel one session on one date. It adds time off for the session, cancels its scheduled bookings and any waiting check-ins, and returns the affected patients' numbers, names and phone numbers for staff to contact. It is refused while a patient is with the doctor, or if the session has ended or is already closed.
+
+Bookings cancelled this way have `cancelled_by_clinic: true`. The patient, or staff, can move them to another session through the usual reschedule endpoint. This turns the booking back to `scheduled` with a new number, and places kept for walk-ins are open to it. Patients who had already checked in are rebooked by reception.
 
 ## Staff patient management
 
@@ -320,6 +323,10 @@ Patients can change their password and log out. They cannot use staff patient, s
 - `GET /api/doctors/{doctor_id}/queue` returns the assigned doctor's queue; optional `day` defaults to the clinic-local date.
 - `GET /api/visits/{visit_id}` returns an authorized visit.
 - `PATCH /api/visits/{visit_id}` accepts only `status`.
+- `POST /api/doctors/{doctor_id}/sessions/arrive` with `{"start_at": "...today's session start..."}` records when the doctor arrived for that session. The first time recorded is kept. Starting the first patient also records it if no one did.
+- `POST /api/doctors/{doctor_id}/sessions/leave` with the same body records when the doctor left. It needs a recorded arrival and is refused while a patient is with the doctor. The first time recorded is kept. Until the doctor leaves, the dashboard keeps showing the session even past its scheduled end. The live queue shows the session as running late while patients are still waiting, for up to 2 hours past the end, and as ended once the doctor leaves.
+
+The server records times when each step happens, and they cannot be set through the API. A visit gets `checked_in_at` when the patient joins the queue, `consult_started_at` when it moves to `in_progress`, and `consult_ended_at` when it is completed or cancelled from `in_progress`. The dashboard shows, for each doctor, today's current or next session with `doctor_arrived_at`, and a `seen` list of today's completed visits with their times. The live queue shows `doctor_arrived_at` and `doctor_left_at` as well.
 
 Visits move from `waiting` to `in_progress` to `completed`. Waiting or in-progress visits may be cancelled. Completed/cancelled visits cannot be edited. Completing or cancelling a visit also updates its appointment. Checked-in bookings must be managed through the staff visit workflow.
 

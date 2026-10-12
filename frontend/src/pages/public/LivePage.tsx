@@ -12,7 +12,7 @@ const STATUS_LABEL: Record<LiveSession["status"], string> = {
   not_started: "Not started",
   in_progress: "In session",
   ended: "Ended",
-  unavailable: "Not available",
+  unavailable: "Cancelled",
 };
 
 function YourPlace({ session, number }: { session: LiveSession; number: number }) {
@@ -57,13 +57,18 @@ function LiveCard({ session, tone, yourNumber }: { session: LiveSession; tone: n
           {session.status === "not_started"
             ? `Starts at ${formatTime(session.start_at)}.`
             : session.status === "ended"
-              ? "This session has ended."
-              : "The doctor isn't available for this session. Please contact reception about your booking."}
+              ? session.doctor_left_at
+                ? `This session has ended. The doctor left at ${formatTime(session.doctor_left_at)}.`
+                : "This session has ended."
+              : "This session is cancelled. If you had a booking, you can move it to another date from Manage booking."}
         </p>
       )}
 
       {open && (
-        <p className="muted small">{waiting === 0 ? "No one waiting." : `${waiting} still to be seen`}</p>
+        <p className="muted small">
+          {session.doctor_arrived_at ? `Doctor arrived at ${formatTime(session.doctor_arrived_at)} · ` : ""}
+          {waiting === 0 ? "No one waiting." : `${waiting} still to be seen`}
+        </p>
       )}
       {yourNumber && open && <YourPlace session={session} number={yourNumber} />}
     </article>

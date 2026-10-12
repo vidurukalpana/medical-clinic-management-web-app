@@ -1,7 +1,8 @@
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { CalendarClock, Clock, Radio, Stethoscope } from "lucide-react";
+import { CalendarCheck, CalendarClock, Clock, Radio, Stethoscope } from "lucide-react";
 import type { BookingSession, GuestBooking } from "../lib/api";
+import { useNextOpenSession } from "../lib/hooks";
 import { formatDay, formatTime, clinicDate, liveQueueLink } from "../lib/time";
 import { SessionPicker } from "./SessionPicker";
 import { Button, Modal, StatusBadge } from "./ui";
@@ -32,6 +33,9 @@ export function BookingTicket({ booking, doctorName, actions }: {
         <p className="muted">
           <Clock size={14} /> {formatDay(day)} · session starts {formatTime(booking.start_at)}
         </p>
+        {needsNewDate(booking) && (
+          <p className="ticket-note">We're sorry, the clinic had to cancel this session. Please move your booking to another date.</p>
+        )}
         {booking.status === "scheduled" && day === clinicDate() && (
           <Link to={liveQueueLink(booking)} className="link-arrow small">
             <Radio size={14} /> See where the queue is
@@ -43,13 +47,14 @@ export function BookingTicket({ booking, doctorName, actions }: {
   );
 }
 
-export function RescheduleModal({ open, doctorId, onClose, onConfirm, busy, staff = false }: {
+export function RescheduleModal({ open, doctorId, onClose, onConfirm, busy, allPlaces = false }: {
   open: boolean;
   doctorId: number;
   onClose: () => void;
   onConfirm: (session: BookingSession) => void;
   busy?: boolean;
-  staff?: boolean;
+  /** Staff, or a patient whose session the clinic cancelled, may use places kept for walk-ins. */
+  allPlaces?: boolean;
 }) {
   const [day, setDay] = useState<string | null>(null);
   const [session, setSession] = useState<BookingSession | null>(null);
@@ -84,7 +89,7 @@ export function RescheduleModal({ open, doctorId, onClose, onConfirm, busy, staf
         }}
         value={session?.start_at ?? null}
         onChange={setSession}
-        staff={staff}
+        allPlaces={allPlaces}
       />
     </Modal>
   );
@@ -92,3 +97,31 @@ export function RescheduleModal({ open, doctorId, onClose, onConfirm, busy, staf
 
 export const isUpcoming = (booking: GuestBooking) =>
   booking.status === "scheduled" && new Date(booking.end_at).getTime() > Date.now();
+
+/** The clinic cancelled this booking's session within the last week, so the patient should pick a new one. */
+export const needsNewDate = (booking: GuestBooking) =>
+  booking.status === "cancelled" &&
+  booking.cancelled_by_clinic &&
+  new Date(booking.end_at).getTime() > Date.now() - 7 * 24 * 3600_000;
+
+/** One tap to the doctor's next open session, or a free choice of date. */
+export function MoveCancelledBooking({ booking, onMove, onChooseDate, busy }: {
+  booking: GuestBooking;
+  onMove: (startAt: string) => void;
+  onChooseDate: () => void;
+  busy?: boolean;
+}) {
+  const next = useNextOpenSession(booking.doctor_id);
+  return (
+    <>
+      {next.data && (
+        <Button size="sm" icon={<CalendarCheck size={15} />} loading={busy} onClick={() => onMove(next.data!.start_at)}>
+          Move to {formatDay(clinicDate(new Date(next.data.start_at)), "short")}, {formatTime(next.data.start_at)}
+        </Button>
+      )}
+      <Button variant="secondary" size="sm" icon={<CalendarClock size={15} />} onClick={onChooseDate}>
+        Choose another date
+      </Button>
+    </>
+  );
+}

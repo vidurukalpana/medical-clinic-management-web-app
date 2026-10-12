@@ -165,7 +165,7 @@ export function StaffLayout() {
           <ThemeSwitch />
           <NavLink to="/staff/account" className="sidebar-user">
             <Avatar name={name} size={36} />
-            <span>
+            <span className="sidebar-user-text">
               <strong>{name}</strong>
               <small>{user.role === "administrator" ? "Administrator" : "Doctor"}</small>
             </span>

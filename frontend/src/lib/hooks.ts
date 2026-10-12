@@ -57,6 +57,23 @@ export function useNextAvailable(doctors: PublicDoctor[] | undefined, days = 7) 
   });
 }
 
+/** A doctor's next session with a free place (counting every place), up to `days` ahead. */
+export function useNextOpenSession(doctorId: number, days = 21) {
+  return useQuery({
+    queryKey: ["next-open-session", doctorId, days],
+    staleTime: 30_000,
+    queryFn: async (): Promise<BookingSession | null> => {
+      const today = clinicDate();
+      for (let offset = 0; offset < days; offset++) {
+        const sessions = await api.sessions(doctorId, addDays(today, offset));
+        const open = sessions.find((session) => session.remaining > 0);
+        if (open) return open;
+      }
+      return null;
+    },
+  });
+}
+
 export function usePatientName(patientId: number) {
   const query = useQuery({
     queryKey: ["patient", patientId],
@@ -64,6 +81,16 @@ export function usePatientName(patientId: number) {
     staleTime: 60_000,
   });
   return query.data?.full_name;
+}
+
+/** The current time, refreshed every `intervalMs` so elapsed times keep ticking. */
+export function useNow(intervalMs = 30_000): number {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), intervalMs);
+    return () => window.clearInterval(timer);
+  }, [intervalMs]);
+  return now;
 }
 
 export function useDebounced<T>(value: T, delay = 300): T {

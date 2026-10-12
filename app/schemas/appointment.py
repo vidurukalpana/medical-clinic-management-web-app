@@ -37,6 +37,7 @@ class AppointmentRead(SessionTime):
     patient_id: int
     appointment_number: int
     status: Literal["scheduled", "completed", "cancelled", "no_show"]
+    cancelled_by_clinic: bool
 
 
 class BookingStatus(BaseModel):
@@ -60,6 +61,7 @@ class GuestBookingRead(SessionTime):
     doctor_id: int
     appointment_number: int
     status: Literal["scheduled", "completed", "cancelled", "no_show"]
+    cancelled_by_clinic: bool
 
 
 class GuestBookingConfirmation(GuestBookingRead):

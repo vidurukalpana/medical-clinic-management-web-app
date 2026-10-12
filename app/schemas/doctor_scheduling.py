@@ -1,6 +1,6 @@
 from datetime import datetime, time
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class AvailabilityCreate(BaseModel):
@@ -62,6 +62,28 @@ class DoctorUnavailabilityRead(BaseModel):
     start_at: datetime
     end_at: datetime
     reason: str | None
+
+
+class SessionCancel(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    start_at: AwareDatetime
+    reason: str | None = Field(default=None, max_length=255)
+
+
+class AffectedBooking(BaseModel):
+    """A patient staff should contact; returned only to staff."""
+
+    appointment_id: int
+    appointment_number: int
+    patient_name: str
+    phone: str
+
+
+class SessionCancellationRead(BaseModel):
+    start_at: datetime
+    end_at: datetime
+    affected: list[AffectedBooking]
 
 
 def _time_in_seconds(value: time) -> int:

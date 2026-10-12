@@ -8,7 +8,10 @@ from app.errors import ForbiddenError
 from app.errors.visits import save_visit
 from app.models import Doctor, User, UserRole, Visit
 from app.routers.appointments import AppSettings, ManagedAppointment
-from app.schemas.visit import DashboardRead, LiveQueueRead, VisitCheckIn, VisitRead, VisitUpdate, WalkInCreate
+from app.schemas.visit import (
+    DashboardRead, LiveQueueRead, SessionArrivalRead, SessionArrive, VisitCheckIn, VisitRead, VisitUpdate,
+    WalkInCreate,
+)
 from app.services import appointments, visits
 
 router = APIRouter(tags=["OPD visits"])
@@ -104,3 +107,23 @@ def read_live_queue(db: DatabaseSession, settings: AppSettings, response: Respon
     """Public: which number each doctor is seeing today. Carries no patient details."""
     response.headers["Cache-Control"] = "no-store"
     return visits.live_queue(db, settings.timezone)
+
+
+@router.post("/doctors/{doctor_id}/sessions/arrive", response_model=SessionArrivalRead)
+def mark_doctor_arrived(
+    doctor_id: int, data: SessionArrive, user: CurrentUser, db: DatabaseSession, settings: AppSettings,
+) -> SessionArrivalRead:
+    """Record when the doctor arrived for today's session; the first time recorded is kept."""
+    doctor = appointments.get_booking_doctor(db, doctor_id, lock=True)
+    require_visit_manager(doctor, user)
+    return visits.mark_doctor_arrived(db, doctor, data.start_at, settings.timezone)
+
+
+@router.post("/doctors/{doctor_id}/sessions/leave", response_model=SessionArrivalRead)
+def mark_doctor_left(
+    doctor_id: int, data: SessionArrive, user: CurrentUser, db: DatabaseSession, settings: AppSettings,
+) -> SessionArrivalRead:
+    """Record when the doctor left today's session; refused while a patient is still with them."""
+    doctor = appointments.get_booking_doctor(db, doctor_id, lock=True)
+    require_visit_manager(doctor, user)
+    return visits.mark_doctor_left(db, doctor, data.start_at, settings.timezone)

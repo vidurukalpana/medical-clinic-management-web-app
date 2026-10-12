@@ -5,7 +5,7 @@ import { Search, KeyRound, Hash, CalendarClock, XCircle, Trash2, Bookmark, Calen
 import { api, type GuestBooking } from "../../lib/api";
 import { usePublicDoctors } from "../../lib/hooks";
 import { forgetBooking, loadSavedBookings, type SavedBooking } from "../../lib/savedBookings";
-import { BookingTicket, RescheduleModal, isUpcoming } from "../../components/BookingPieces";
+import { BookingTicket, MoveCancelledBooking, RescheduleModal, isUpcoming, needsNewDate } from "../../components/BookingPieces";
 import { Button, Card, ErrorNote, Field } from "../../components/ui";
 import { useToast } from "../../components/Toast";
 
@@ -165,6 +165,13 @@ export function ManagePage() {
                         Cancel booking
                       </Button>
                     </>
+                  ) : needsNewDate(booking) ? (
+                    <MoveCancelledBooking
+                      booking={booking}
+                      busy={reschedule.isPending}
+                      onMove={(startAt) => reschedule.mutate(startAt)}
+                      onChooseDate={() => setRescheduling(true)}
+                    />
                   ) : booking.status === "cancelled" ? (
                     <Link to={`/book?doctor=${booking.doctor_id}`} className="btn btn-primary btn-sm">
                       <CalendarPlus size={15} /> Book again
@@ -178,6 +185,7 @@ export function ManagePage() {
                 onClose={() => setRescheduling(false)}
                 onConfirm={(session) => reschedule.mutate(session.start_at)}
                 busy={reschedule.isPending}
+                allPlaces={needsNewDate(booking)}
               />
             </div>
           ) : (

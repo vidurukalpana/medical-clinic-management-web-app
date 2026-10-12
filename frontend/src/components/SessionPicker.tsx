@@ -18,12 +18,12 @@ export function upcomingClinicDays(count = DAYS_AHEAD): string[] {
   return days;
 }
 
-function DayChip({ doctorId, day, selected, onSelect, staff }: {
+function DayChip({ doctorId, day, selected, onSelect, allPlaces }: {
   doctorId: number;
   day: string;
   selected: boolean;
   onSelect: () => void;
-  staff: boolean;
+  allPlaces: boolean;
 }) {
   const status = useQuery({
     queryKey: ["booking-status", doctorId, day],
@@ -31,7 +31,7 @@ function DayChip({ doctorId, day, selected, onSelect, staff }: {
     staleTime: 30_000,
   });
   const date = new Date(`${day}T12:00:00Z`);
-  const remaining = staff ? status.data?.remaining_places : status.data?.remaining_online_places;
+  const remaining = allPlaces ? status.data?.remaining_places : status.data?.remaining_online_places;
   const full = remaining === 0;
   return (
     <button
@@ -50,11 +50,11 @@ function DayChip({ doctorId, day, selected, onSelect, staff }: {
   );
 }
 
-export function DayStrip({ doctorId, value, onChange, staff = false }: {
+export function DayStrip({ doctorId, value, onChange, allPlaces = false }: {
   doctorId: number;
   value: string | null;
   onChange: (day: string) => void;
-  staff?: boolean;
+  allPlaces?: boolean;
 }) {
   const days = useMemo(() => upcomingClinicDays(), []);
   const scroller = useRef<HTMLDivElement>(null);
@@ -74,7 +74,7 @@ export function DayStrip({ doctorId, value, onChange, staff = false }: {
             day={day}
             selected={day === value}
             onSelect={() => onChange(day)}
-            staff={staff}
+            allPlaces={allPlaces}
           />
         ))}
       </div>
@@ -98,23 +98,26 @@ function bucket(session: BookingSession) {
 
 const BUCKET_ICON = { Morning: Sunrise, Afternoon: Sun, Evening: Moon } as const;
 
-/** Staff can use every place; online booking only the places not kept for walk-ins and reception. */
-const placesFor = (session: BookingSession, staff: boolean) => (staff ? session.remaining : session.remaining_online);
+/**
+ * `allPlaces` (allPlaces, or a patient whose session the clinic cancelled) can use every place;
+ * online booking only the places not kept for walk-ins and reception.
+ */
+const placesFor = (session: BookingSession, allPlaces: boolean) => (allPlaces ? session.remaining : session.remaining_online);
 
-export function SessionList({ doctorId, day, value, onChange, staff = false }: {
+export function SessionList({ doctorId, day, value, onChange, allPlaces = false }: {
   doctorId: number;
   day: string;
   value: string | null;
   onChange: (session: BookingSession) => void;
-  staff?: boolean;
+  allPlaces?: boolean;
 }) {
   const sessions = useQuery({
     queryKey: ["sessions", doctorId, day],
     queryFn: () => api.sessions(doctorId, day),
     staleTime: 15_000,
   });
-  const open = sessions.data?.filter((session) => placesFor(session, staff) > 0) ?? [];
-  const keptForReception = !staff && !!sessions.data?.some((session) => !session.remaining_online && session.remaining);
+  const open = sessions.data?.filter((session) => placesFor(session, allPlaces) > 0) ?? [];
+  const keptForReception = !allPlaces && !!sessions.data?.some((session) => !session.remaining_online && session.remaining);
 
   // With one open session the date is enough, so choose it for the patient.
   const onlyOpen = open.length === 1 ? open[0] : null;
@@ -138,7 +141,7 @@ export function SessionList({ doctorId, day, value, onChange, staff = false }: {
       {sessions.data.map((session) => {
         const name = bucket(session);
         const Icon = BUCKET_ICON[name];
-        const places = placesFor(session, staff);
+        const places = placesFor(session, allPlaces);
         const full = places === 0;
         return (
           <button
@@ -161,7 +164,7 @@ export function SessionList({ doctorId, day, value, onChange, staff = false }: {
         );
       })}
       <p className="muted small">
-        Patients are seen in number order. {staff ? "Staff bookings can use places kept for walk-ins." : "You'll get your number when you book."}
+        Patients are seen in number order. You'll get a number when you book.
       </p>
       {keptForReception && (
         <p className="muted small">Some places are kept for walk-ins. If a session is full, reception may still help.</p>
@@ -171,14 +174,14 @@ export function SessionList({ doctorId, day, value, onChange, staff = false }: {
 }
 
 /** Day strip + that day's sessions, used for booking and rescheduling. */
-export function SessionPicker({ doctorId, day, onDayChange, value, onChange, staff = false }: {
+export function SessionPicker({ doctorId, day, onDayChange, value, onChange, allPlaces = false }: {
   doctorId: number;
   day: string | null;
   onDayChange: (day: string) => void;
   value: string | null;
   onChange: (session: BookingSession) => void;
-  /** Staff bookings may use places kept for walk-ins and reception. */
-  staff?: boolean;
+  /** Count every place, including those kept for walk-ins and reception. */
+  allPlaces?: boolean;
 }) {
   const days = useMemo(() => upcomingClinicDays(), []);
   useEffect(() => {
@@ -186,8 +189,8 @@ export function SessionPicker({ doctorId, day, onDayChange, value, onChange, sta
   }, [day, days, onDayChange]);
   return (
     <div className="session-picker">
-      <DayStrip doctorId={doctorId} value={day} onChange={onDayChange} staff={staff} />
-      {day && <SessionList doctorId={doctorId} day={day} value={value} onChange={onChange} staff={staff} />}
+      <DayStrip doctorId={doctorId} value={day} onChange={onDayChange} allPlaces={allPlaces} />
+      {day && <SessionList doctorId={doctorId} day={day} value={value} onChange={onChange} allPlaces={allPlaces} />}
     </div>
   );
 }
