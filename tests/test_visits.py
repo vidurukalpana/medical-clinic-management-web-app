@@ -694,3 +694,99 @@ def test_check_in_by_qr_code(client, opd, test_settings):
     assert client.get(f"/api/check-in/{later['checkin_code']}", headers=headers).json()["problem"] == (
         "This booking was cancelled."
     )
+
+
+def test_sms_confirmations_and_day_reminders(client, opd, monkeypatch, test_settings):
+    from sqlalchemy import select
+    from app.models import SmsMessage
+    from app.services import sms
+    headers, doctors, patients = opd
+    doctor_id, other_id = doctors[0]["id"], doctors[1]["id"]
+    zone = ZoneInfo(test_settings.timezone)
+    clock = {"now": datetime(2030, 1, 7, 6, tzinfo=zone)}
+
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return clock["now"].astimezone(tz)
+    monkeypatch.setattr(sms, "datetime", Clock)
+
+    def outbox():
+        dependency = client.app.dependency_overrides[get_db]()
+        db = next(dependency)
+        try:
+            return [(m.appointment_id, m.kind, m.phone, m.body, m.status)
+                    for m in db.scalars(select(SmsMessage).order_by(SmsMessage.id))]
+        finally:
+            dependency.close()
+
+    def run(job):
+        dependency = client.app.dependency_overrides[get_db]()
+        db = next(dependency)
+        try:
+            return job(db)
+        finally:
+            dependency.close()
+
+    monday, tuesday = "2030-01-07T09:00:00+05:30", "2030-01-08T09:00:00+05:30"
+    guest = client.post("/api/guest/appointments", json={
+        "doctor_id": doctor_id, "start_at": monday, "full_name": "Online Patient", "phone": "077 123 4567",
+    }).json()
+    staff_booking = client.post("/api/appointments", headers=headers, json={
+        "doctor_id": doctor_id, "patient_id": patients[0], "start_at": monday,
+    }).json()
+    walk_in(client, headers, doctor_id, patients[1])
+    messages = outbox()
+    assert [(m[0], m[1], m[2]) for m in messages] == [
+        (guest["id"], "confirmation", "+94771234567"), (staff_booking["id"], "confirmation", "+94771234567"),
+    ]
+    assert messages[0][3].endswith(f"Mon 7 Jan, session starts 9:00 AM. Your number: 1. Booking ID {guest['id']}.")
+
+    # Picking the same session changes nothing, so no text; a real move confirms the new details.
+    token = {"X-Booking-Token": guest["management_token"]}
+    client.put(f"/api/guest/appointments/{guest['id']}/reschedule", headers=token, json={"start_at": monday})
+    client.put(f"/api/appointments/{staff_booking['id']}/reschedule", headers=headers, json={"start_at": tuesday})
+    assert [m[1] for m in outbox()] == ["confirmation"] * 3
+    assert "Tue 8 Jan" in outbox()[2][3]
+
+    clock["now"] = datetime(2030, 1, 7, 6, 30, tzinfo=zone)
+    assert run(lambda db: sms.queue_due_reminders(db, test_settings)) == 0  # Due at 7:00 for a 9:00 session.
+    clock["now"] = datetime(2030, 1, 7, 7, 5, tzinfo=zone)
+    assert run(lambda db: sms.queue_due_reminders(db, test_settings)) == 1  # Tuesday's is not due yet.
+    assert run(lambda db: sms.queue_due_reminders(db, test_settings)) == 0  # Never twice.
+    reminder = outbox()[-1]
+    assert (reminder[0], reminder[1]) == (guest["id"], "reminder")
+    code = guest["checkin_code"]
+    assert f"Check-in code {code[:5]}-{code[5:]}" in reminder[3]
+
+    # Booked after the reminder time: the confirmation is enough.
+    clock["now"] = datetime(2030, 1, 7, 7, 30, tzinfo=zone)
+    client.post("/api/appointments", headers=headers, json={
+        "doctor_id": doctor_id, "patient_id": patients[2], "start_at": monday,
+    })
+    assert run(lambda db: sms.queue_due_reminders(db, test_settings)) == 0
+
+    # Booked early, but the reminder run comes too close to the session to help.
+    clock["now"] = datetime(2030, 1, 7, 6, 10, tzinfo=zone)
+    late = client.post("/api/appointments", headers=headers, json={
+        "doctor_id": other_id, "patient_id": patients[0], "start_at": monday,
+    }).json()
+    clock["now"] = datetime(2030, 1, 7, 8, 40, tzinfo=zone)
+    assert run(lambda db: sms.queue_due_reminders(db, test_settings)) == 0
+    clock["now"] = datetime(2030, 1, 7, 8, 20, tzinfo=zone)
+    assert run(lambda db: sms.queue_due_reminders(db, test_settings)) == 1  # 40 minutes ahead is still useful.
+    assert run(lambda db: sms.deliver_queued(db, sms.OutboxOnlySender())) == 7
+    assert {m[4] for m in outbox()} == {"logged"}
+
+    page = client.get("/api/admin/sms", headers=headers).json()
+    assert (page["total"], page["provider"], page["items"][0]["kind"]) == (7, "outbox", "reminder")
+    assert page["items"][0]["appointment_id"] == late["id"]
+    doctor_headers, _ = login(client, "doctor1", configured_password(test_settings.doctor_one_password))
+    assert client.get("/api/admin/sms", headers=doctor_headers).status_code == 403
+
+
+def test_phone_numbers_are_normalized():
+    from app.services.sms import normalize_phone
+    assert normalize_phone("077 123 4567") == "+94771234567"
+    assert normalize_phone("+94 77 123 4567") == "+94771234567"
+    assert normalize_phone("(011) 234-5678") == "+94112345678"

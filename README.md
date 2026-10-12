@@ -302,6 +302,14 @@ Configure the model in `.env`:
 
 Before a public deployment, add rate limiting for this endpoint, because every question uses model compute.
 
+## Text messages to patients
+
+Patients get a text when they book or move a booking: the doctor, date, session start, their number and booking ID. On the day of the visit they get a reminder with their number and check-in code. Reminders go out at `CLINIC_SMS_REMINDER_HOUR` (default 7 AM) or `CLINIC_SMS_REMINDER_HOURS_BEFORE` (default 3) hours before the session, whichever is later. No reminder is sent if the booking was made or moved after that time, if the patient has checked in, or if the session starts within 30 minutes.
+
+Each message is written to the `sms_outbox` table in the same transaction as the booking. A background job in the API process runs every `CLINIC_SMS_WORKER_INTERVAL_SECONDS` (default 60). It queues due reminders, then hands queued messages to the provider. Rows are locked while sending, and reminders are unique per booking and session, so running several API processes never sends a message twice. Set `CLINIC_SMS_WORKER_ENABLED=false` to turn the job off.
+
+**No SMS provider is connected yet.** With the default `CLINIC_SMS_PROVIDER=outbox`, messages are recorded but not sent. Administrators can read them under **SMS outbox** in the staff portal, or through `GET /api/admin/sms`. To send for real, add a sender class for the chosen gateway in `app/services/sms.py` and select it with `CLINIC_SMS_PROVIDER`. Phone numbers are stored in `+94` form when they look like Sri Lankan numbers.
+
 ## Optional patient accounts
 
 `POST /api/auth/register-patient` accepts only `username` and `password` (at least 12 characters). The server assigns the patient role. Login uses the existing `/api/auth/login` endpoint.

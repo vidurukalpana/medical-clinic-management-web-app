@@ -14,6 +14,7 @@ import { SchedulePage } from "./pages/staff/SchedulePage";
 import { DoctorsPage, UsersPage } from "./pages/staff/AdminPages";
 import { AccountPage } from "./pages/staff/AccountPage";
 import { CheckInPage } from "./pages/staff/CheckInPage";
+import { SmsOutboxPage } from "./pages/staff/SmsOutboxPage";
 import { useAuth } from "./lib/auth";
 import { EmptyState } from "./components/ui";
 
@@ -58,6 +59,7 @@ export default function App() {
         <Route path="account" element={<AccountPage />} />
         <Route path="doctors" element={<AdminOnly><DoctorsPage /></AdminOnly>} />
         <Route path="users" element={<AdminOnly><UsersPage /></AdminOnly>} />
+        <Route path="sms" element={<AdminOnly><SmsOutboxPage /></AdminOnly>} />
       </Route>
     </Routes>
   );

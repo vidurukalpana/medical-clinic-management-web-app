@@ -25,6 +25,8 @@ def test_settings() -> Settings:
         doctor_one_password=SecretStr("ClinicDoctor1!"),
         doctor_two_username="doctor2",
         doctor_two_password=SecretStr("ClinicDoctor2!"),
+        # Tests run the SMS jobs themselves.
+        sms_worker_enabled=False,
     )
 
 

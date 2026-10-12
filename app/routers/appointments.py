@@ -15,7 +15,7 @@ from app.schemas.appointment import (
     GuestBookingConfirmation, GuestBookingCreate, GuestBookingRead,
 )
 from app.schemas.patient import PatientCreate
-from app.services import appointments
+from app.services import appointments, sms
 from app.services.patients import create_patient
 from app.services.security import create_session_token, hash_session_token
 
@@ -42,6 +42,17 @@ def managed_appointment(
 ManagedAppointment = Annotated[tuple[Doctor, Appointment], Depends(managed_appointment)]
 
 
+def reschedule_and_confirm(
+    db: DatabaseSession, doctor: Doctor, appointment: Appointment, start_at: datetime,
+    clinic_timezone: str, *, online: bool = False,
+) -> None:
+    """Move the booking and, if it really moved, queue a confirmation text with the new details."""
+    before = (appointment.start_at, appointment.status)
+    appointments.reschedule_appointment(db, doctor, appointment, start_at, clinic_timezone, online=online)
+    if (appointment.start_at, appointment.status) != before:
+        sms.queue_confirmation(db, appointment, clinic_timezone)
+
+
 @router.get("/doctors/{doctor_id}/sessions", response_model=list[BookingSession])
 def read_booking_sessions(
     doctor_id: int, day: Annotated[date, Query()],
@@ -60,6 +71,7 @@ def add_appointment(
     require_booking_manager(doctor, user)
     appointment = appointments.create_appointment(db, doctor, data, settings.timezone)
     appointment.booked_by_user_id = user.id
+    sms.queue_confirmation(db, appointment, settings.timezone)
     save_appointment(db)
     return AppointmentRead.model_validate(appointment)
 
@@ -101,7 +113,7 @@ def move_appointment(
     db: DatabaseSession, settings: AppSettings,
 ) -> AppointmentRead:
     doctor, appointment = managed
-    appointments.reschedule_appointment(db, doctor, appointment, data.start_at, settings.timezone)
+    reschedule_and_confirm(db, doctor, appointment, data.start_at, settings.timezone)
     save_appointment(db)
     return AppointmentRead.model_validate(appointment)
 
@@ -146,6 +158,7 @@ def book_as_guest(
     token = create_session_token()
     appointment.booked_by_user_id = user.id if user is not None else None
     appointment.guest_token_hash = hash_session_token(token)
+    sms.queue_confirmation(db, appointment, settings.timezone)
     save_appointment(db)
     response.headers["Cache-Control"] = "no-store"
     return GuestBookingConfirmation(
@@ -192,9 +205,7 @@ def move_guest_booking(
     db: DatabaseSession, settings: AppSettings,
 ) -> GuestBookingRead:
     doctor, appointment = managed
-    appointments.reschedule_appointment(
-        db, doctor, appointment, data.start_at, settings.timezone, online=True,
-    )
+    reschedule_and_confirm(db, doctor, appointment, data.start_at, settings.timezone, online=True)
     save_appointment(db)
     return GuestBookingRead.model_validate(appointment)
 
@@ -237,8 +248,6 @@ def move_owned_booking(
     db: DatabaseSession, settings: AppSettings,
 ) -> GuestBookingRead:
     doctor, appointment = managed
-    appointments.reschedule_appointment(
-        db, doctor, appointment, data.start_at, settings.timezone, online=True,
-    )
+    reschedule_and_confirm(db, doctor, appointment, data.start_at, settings.timezone, online=True)
     save_appointment(db)
     return GuestBookingRead.model_validate(appointment)

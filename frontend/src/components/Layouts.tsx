@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
+  MessageSquare,
   LayoutDashboard,
   CalendarDays,
   Users,
@@ -95,6 +96,7 @@ const STAFF_NAV = [
 const ADMIN_NAV = [
   { to: "/staff/doctors", label: "Doctors", icon: Stethoscope },
   { to: "/staff/users", label: "Accounts", icon: ShieldCheck },
+  { to: "/staff/sms", label: "SMS outbox", icon: MessageSquare },
 ];
 
 const THEME_OPTIONS: { value: ThemePreference; label: string; icon: typeof Sun }[] = [

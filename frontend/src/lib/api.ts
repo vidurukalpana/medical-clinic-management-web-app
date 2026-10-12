@@ -102,6 +102,18 @@ export interface CheckInLookup extends SessionTime {
   /** Why the booking can't be checked in now, in words to tell the patient. */
   problem: string | null;
 }
+export interface SmsMessage {
+  id: number;
+  appointment_id: number | null;
+  kind: "confirmation" | "reminder";
+  phone: string;
+  body: string;
+  /** "logged" = recorded with no SMS provider set up. */
+  status: "queued" | "sent" | "failed" | "logged";
+  error: string | null;
+  created_at: string;
+  sent_at: string | null;
+}
 export interface SessionCancellation extends SessionTime {
   affected: { appointment_id: number; appointment_number: number; patient_name: string; phone: string }[];
 }
@@ -474,6 +486,8 @@ export const api = {
   }) => request<AuthUser>("/admin/users", { method: "POST", body }),
   updateUser: (id: number, body: { role?: Role; is_active?: boolean; doctor?: DoctorProfileInput }) =>
     request<AuthUser>(`/admin/users/${id}`, { method: "PATCH", body }),
+  smsOutbox: (offset = 0, limit = 50) =>
+    request<Page<SmsMessage> & { provider: string }>("/admin/sms", { query: { offset, limit } }),
   resetPassword: (id: number, new_password: string) =>
     request<void>(`/admin/users/${id}/password`, { method: "PUT", body: { new_password } }),
 };

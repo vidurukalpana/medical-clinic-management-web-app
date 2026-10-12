@@ -8,6 +8,7 @@ from app.models.doctor_scheduling import (
 )
 from app.models.patient import Patient, PatientGender
 from app.models.session_arrival import SessionArrival
+from app.models.sms import SmsMessage
 from app.models.user import User, UserRole
 
 __all__ = [
@@ -20,6 +21,7 @@ __all__ = [
     "Patient",
     "PatientGender",
     "SessionArrival",
+    "SmsMessage",
     "User",
     "UserRole",
 ]
