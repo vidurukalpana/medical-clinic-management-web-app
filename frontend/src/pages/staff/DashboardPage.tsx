@@ -306,6 +306,7 @@ export function DashboardPage() {
                         <div className="timeline-top">
                           <strong>{appointment.patient_name}</strong>
                           <StatusBadge status={appointment.status} />
+                          {appointment.cancelled_by_clinic && <span className="chip">Session cancelled</span>}
                           {appointment.visit_id && <span className="chip">In queue</span>}
                         </div>
                         <span className="muted small">

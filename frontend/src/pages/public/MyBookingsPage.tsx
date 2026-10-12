@@ -5,7 +5,7 @@ import { CalendarPlus, CalendarClock, XCircle, History, KeyRound } from "lucide-
 import { api, type GuestBooking } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { usePublicDoctors } from "../../lib/hooks";
-import { BookingTicket, RescheduleModal, isUpcoming } from "../../components/BookingPieces";
+import { BookingTicket, MoveCancelledBooking, RescheduleModal, isUpcoming, needsNewDate } from "../../components/BookingPieces";
 import { Button, EmptyState, ErrorNote, Spinner } from "../../components/ui";
 import { useToast } from "../../components/Toast";
 import { ChangePasswordCard } from "../staff/AccountPage";
@@ -51,8 +51,9 @@ export function MyBookingsPage() {
   if (user.role !== "patient") return <Navigate to="/staff" replace />;
 
   const names = new Map(doctors.data?.map((doctor) => [doctor.id, doctor.display_name]));
+  const toMove = (bookings.data ?? []).filter(needsNewDate);
   const upcoming = (bookings.data ?? []).filter(isUpcoming).reverse();
-  const past = (bookings.data ?? []).filter((booking) => !isUpcoming(booking));
+  const past = (bookings.data ?? []).filter((booking) => !isUpcoming(booking) && !needsNewDate(booking));
 
   return (
     <div className="container narrow-page">
@@ -89,6 +90,28 @@ export function MyBookingsPage() {
         />
       ) : (
         <>
+          {toMove.length > 0 && (
+            <>
+              <h2 className="list-title">Needs a new date</h2>
+              <div className="ticket-list">
+                {toMove.map((booking) => (
+                  <BookingTicket
+                    key={booking.id}
+                    booking={booking}
+                    doctorName={names.get(booking.doctor_id)}
+                    actions={
+                      <MoveCancelledBooking
+                        booking={booking}
+                        busy={reschedule.isPending && reschedule.variables?.id === booking.id}
+                        onMove={(startAt) => reschedule.mutate({ id: booking.id, startAt })}
+                        onChooseDate={() => setMoving(booking)}
+                      />
+                    }
+                  />
+                ))}
+              </div>
+            </>
+          )}
           <h2 className="list-title">Upcoming</h2>
           {upcoming.length ? (
             <div className="ticket-list">
@@ -145,6 +168,7 @@ export function MyBookingsPage() {
           doctorId={moving.doctor_id}
           onClose={() => setMoving(null)}
           busy={reschedule.isPending}
+          allPlaces={needsNewDate(moving)}
           onConfirm={(session) => reschedule.mutate({ id: moving.id, startAt: session.start_at })}
         />
       )}

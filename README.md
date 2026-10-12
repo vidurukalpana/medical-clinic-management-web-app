@@ -178,6 +178,9 @@ Availability records define a doctor's weekly consulting sessions: weekday, star
 - `POST /api/doctors/{doctor_id}/unavailability` — add an unavailable period.
 - `PUT /api/doctors/{doctor_id}/unavailability/{unavailability_id}` — replace an unavailable period.
 - `DELETE /api/doctors/{doctor_id}/unavailability/{unavailability_id}` — remove an unavailable period.
+- `POST /api/doctors/{doctor_id}/sessions/cancel` with `{"start_at": "...session start...", "reason": "optional, staff only"}` — cancel one session on one date. It adds time off for the session, cancels its scheduled bookings and any waiting check-ins, and returns the affected patients' numbers, names and phone numbers for staff to contact. It is refused while a patient is with the doctor, or if the session has ended or is already closed.
+
+Bookings cancelled this way have `cancelled_by_clinic: true`. The patient, or staff, can move them to another session through the usual reschedule endpoint. This turns the booking back to `scheduled` with a new number, and places kept for walk-ins are open to it. Patients who had already checked in are rebooked by reception.
 
 ## Staff patient management
 

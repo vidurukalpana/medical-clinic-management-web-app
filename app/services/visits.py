@@ -171,7 +171,8 @@ def dashboard(
                                            path=f"/api/appointments/{appointment.id}/cancel"))
         appointment_items.append(DashboardAppointment(
             **{key: getattr(appointment, key) for key in
-               ("id", "doctor_id", "patient_id", "start_at", "end_at", "appointment_number", "status")},
+               ("id", "doctor_id", "patient_id", "start_at", "end_at", "appointment_number", "status",
+                "cancelled_by_clinic")},
             patient_name=patient_name, doctor_name=doctor_names[appointment.doctor_id],
             visit_id=visit_id, actions=actions,
         ))

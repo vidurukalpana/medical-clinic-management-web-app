@@ -145,15 +145,24 @@ def reschedule_appointment(
     db: Session, doctor: Doctor, appointment: Appointment,
     start_at: datetime, clinic_timezone: str, *, online: bool = False,
 ) -> Appointment:
+    # A patient whose session the clinic cancelled may move to another session.
+    rebooking = appointment.status == "cancelled" and appointment.cancelled_by_clinic
+    if rebooking and db.scalar(select(Visit.id).where(Visit.appointment_id == appointment.id)):
+        raise ConflictError("You had checked in before the session was cancelled. Please ask reception to book again.")
     ensure_not_checked_in(db, appointment)
-    if appointment.status != "scheduled":
+    if appointment.status != "scheduled" and not rebooking:
         raise ConflictError("Only scheduled appointments can be rescheduled.")
-    if appointment.start_at <= datetime.now(timezone.utc):
+    if not rebooking and appointment.start_at <= datetime.now(timezone.utc):
         raise ConflictError("An appointment whose session has started cannot be rescheduled.")
-    if start_at == appointment.start_at:
+    if not rebooking and start_at == appointment.start_at:
         # Already in this session; keep the patient's number.
         return appointment
-    session = select_session(db, doctor, start_at, clinic_timezone, appointment.id, online=online)
+    # A displaced patient already held a place, so places kept for walk-ins are open to them.
+    session = select_session(db, doctor, start_at, clinic_timezone, appointment.id,
+                             online=online and not rebooking)
+    if rebooking:
+        appointment.status = "scheduled"
+        appointment.cancelled_by_clinic = False
     appointment.start_at = session.start_at
     appointment.end_at = session.end_at
     appointment.appointment_number = next_appointment_number(

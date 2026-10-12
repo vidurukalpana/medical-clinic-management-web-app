@@ -176,6 +176,9 @@ def upgrade_booking_schema(
         _upgrade_session_capacity(connection)
         _upgrade_reserved_places(connection)
         _upgrade_doctor_profiles(connection)
+        connection.execute(text(
+            "ALTER TABLE appointments ADD COLUMN IF NOT EXISTS cancelled_by_clinic BOOLEAN NOT NULL DEFAULT false"
+        ))
         _upgrade_appointment_numbers(connection, timezone)
         if purge_clinical_data:
             connection.execute(text("ALTER TABLE appointments DROP COLUMN IF EXISTS reason"))

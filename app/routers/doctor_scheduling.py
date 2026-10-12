@@ -13,8 +13,11 @@ from app.schemas.doctor_scheduling import (
     AvailabilityRead,
     DoctorUnavailabilityCreate,
     DoctorUnavailabilityRead,
+    SessionCancel,
+    SessionCancellationRead,
 )
 from app.services.doctor_scheduling import (
+    cancel_session,
     create_availability,
     create_unavailability,
     delete_availability,
@@ -157,3 +160,21 @@ def remove_unavailability(
 ) -> Response:
     delete_unavailability(db, unavailability)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post(
+    "/sessions/cancel",
+    response_model=SessionCancellationRead,
+    summary="Cancel one session on one date",
+    responses={409: {"description": "Session ended, already closed, or a patient is with the doctor"}},
+)
+def cancel_one_session(
+    data: SessionCancel,
+    doctor: ScheduleManagerDoctor,
+    db: DatabaseSession,
+    settings: AppSettings,
+    response: Response,
+) -> SessionCancellationRead:
+    """Closes the session and cancels its bookings; returns the patients to contact."""
+    response.headers["Cache-Control"] = "no-store"
+    return cancel_session(db, doctor.id, data, settings.timezone)

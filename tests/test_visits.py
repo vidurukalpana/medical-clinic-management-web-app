@@ -516,3 +516,54 @@ def test_walk_ins_use_places_kept_from_online_booking(client, opd):
     walk = walk_in(client, headers, doctor_id, patients[0])
     assert walk.status_code == 201
     assert walk.json()["appointment_number"] == 1
+
+
+def test_cancelling_a_session_lets_patients_move(client, opd, test_settings):
+    headers, doctors, patients = opd
+    doctor_id, other_id = doctors[0]["id"], doctors[1]["id"]
+    monday, tuesday = "2030-01-07T09:00:00+05:30", "2030-01-08T09:00:00+05:30"
+    guest = client.post("/api/guest/appointments", json={
+        "doctor_id": doctor_id, "start_at": monday, "full_name": "Online Patient", "phone": "0771234567",
+    }).json()
+    staff_booking = client.post("/api/appointments", headers=headers, json={
+        "doctor_id": doctor_id, "patient_id": patients[0], "start_at": monday,
+    }).json()
+    walked = walk_in(client, headers, doctor_id, patients[1]).json()
+    url = f"/api/doctors/{doctor_id}/sessions/cancel"
+
+    doctor_headers, body = login(client, "doctor1", configured_password(test_settings.doctor_one_password))
+    not_own = doctor_id if body["user"]["doctor"]["id"] != doctor_id else other_id
+    assert client.post(f"/api/doctors/{not_own}/sessions/cancel", headers=doctor_headers,
+                       json={"start_at": monday}).status_code == 403
+    assert client.post(url, headers=headers, json={"start_at": "2030-01-07T09:30:00+05:30"}).status_code == 404
+
+    response = client.post(url, headers=headers, json={"start_at": monday, "reason": "Doctor unwell"})
+    assert response.status_code == 200
+    assert [(item["appointment_number"], item["patient_name"]) for item in response.json()["affected"]] == [
+        (1, "Online Patient"), (2, "First Patient"), (3, "Second Patient"),
+    ]
+    assert client.post(url, headers=headers, json={"start_at": monday}).status_code == 409
+    assert client.get(f"/api/doctors/{doctor_id}/sessions?day=2030-01-07").json() == []
+    live = {s["doctor_id"]: s for s in client.get("/api/live-queue").json()["sessions"]}
+    assert live[doctor_id]["status"] == "unavailable"
+    assert client.get(f"/api/visits/{walked['id']}", headers=headers).json()["status"] == "cancelled"
+
+    token = {"X-Booking-Token": guest["management_token"]}
+    cancelled = client.get(f"/api/guest/appointments/{guest['id']}", headers=token).json()
+    assert (cancelled["status"], cancelled["cancelled_by_clinic"]) == ("cancelled", True)
+    moved = client.put(f"/api/guest/appointments/{guest['id']}/reschedule", headers=token, json={"start_at": tuesday})
+    assert moved.status_code == 200
+    assert (moved.json()["status"], moved.json()["cancelled_by_clinic"], moved.json()["appointment_number"]) == (
+        "scheduled", False, 1,
+    )
+    # A patient who had already checked in is rebooked by reception.
+    assert client.put(f"/api/appointments/{walked['appointment_id']}/reschedule", headers=headers,
+                      json={"start_at": tuesday}).status_code == 409
+    assert client.put(f"/api/appointments/{staff_booking['id']}/reschedule", headers=headers,
+                      json={"start_at": tuesday}).json()["appointment_number"] == 2
+
+    # The session cannot be cancelled while a patient is with the doctor.
+    in_room = walk_in(client, headers, other_id, patients[2]).json()
+    assert client.patch(f"/api/visits/{in_room['id']}", headers=headers, json={"status": "in_progress"}).status_code == 200
+    assert client.post(f"/api/doctors/{other_id}/sessions/cancel", headers=headers,
+                       json={"start_at": monday}).status_code == 409

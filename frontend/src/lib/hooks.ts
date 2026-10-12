@@ -57,6 +57,23 @@ export function useNextAvailable(doctors: PublicDoctor[] | undefined, days = 7) 
   });
 }
 
+/** A doctor's next session with a free place (counting every place), up to `days` ahead. */
+export function useNextOpenSession(doctorId: number, days = 21) {
+  return useQuery({
+    queryKey: ["next-open-session", doctorId, days],
+    staleTime: 30_000,
+    queryFn: async (): Promise<BookingSession | null> => {
+      const today = clinicDate();
+      for (let offset = 0; offset < days; offset++) {
+        const sessions = await api.sessions(doctorId, addDays(today, offset));
+        const open = sessions.find((session) => session.remaining > 0);
+        if (open) return open;
+      }
+      return null;
+    },
+  });
+}
+
 export function usePatientName(patientId: number) {
   const query = useQuery({
     queryKey: ["patient", patientId],

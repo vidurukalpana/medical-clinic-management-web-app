@@ -32,6 +32,14 @@ function RowActions({ appointment, onReschedule }: { appointment: Appointment; o
     },
     onError: (error) => toast((error as Error).message, "error"),
   });
+  if (appointment.status === "cancelled" && appointment.cancelled_by_clinic)
+    return (
+      <div className="action-row">
+        <Button size="sm" variant="secondary" icon={<CalendarClock size={14} />} onClick={onReschedule}>
+          Move
+        </Button>
+      </div>
+    );
   if (appointment.status !== "scheduled") return null;
   const now = Date.now();
   const ended = new Date(appointment.end_at).getTime() <= now;
@@ -173,6 +181,7 @@ export function AppointmentsPage() {
                         <td className="muted">{names.get(appointment.doctor_id) ?? `Doctor #${appointment.doctor_id}`}</td>
                         <td>
                           <StatusBadge status={appointment.status} />
+                          {appointment.cancelled_by_clinic && <span className="chip">Session cancelled</span>}
                         </td>
                         <td className="muted mono small">#{appointment.id}</td>
                         <td className="align-right">
@@ -191,7 +200,7 @@ export function AppointmentsPage() {
 
       {moving && (
         <RescheduleModal
-          staff
+          allPlaces
           open
           doctorId={moving.doctor_id}
           onClose={() => setMoving(null)}

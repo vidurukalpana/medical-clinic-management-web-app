@@ -76,12 +76,18 @@ export interface Appointment extends SessionTime {
   patient_id: number;
   appointment_number: number;
   status: AppointmentStatus;
+  /** Staff cancelled the whole session; the booking can be moved to another session. */
+  cancelled_by_clinic: boolean;
 }
 export interface GuestBooking extends SessionTime {
   id: number;
   doctor_id: number;
   appointment_number: number;
   status: AppointmentStatus;
+  cancelled_by_clinic: boolean;
+}
+export interface SessionCancellation extends SessionTime {
+  affected: { appointment_id: number; appointment_number: number; patient_name: string; phone: string }[];
 }
 export interface GuestBookingConfirmation extends GuestBooking {
   management_token: string;
@@ -401,6 +407,8 @@ export const api = {
     request<Availability>(`/doctors/${doctorId}/availability/${id}`, { method: "PUT", body }),
   deleteAvailability: (doctorId: number, id: number) =>
     request<void>(`/doctors/${doctorId}/availability/${id}`, { method: "DELETE" }),
+  cancelSession: (doctorId: number, start_at: string, reason: string | null) =>
+    request<SessionCancellation>(`/doctors/${doctorId}/sessions/cancel`, { method: "POST", body: { start_at, reason } }),
   unavailability: (doctorId: number) => request<Unavailability[]>(`/doctors/${doctorId}/unavailability`),
   addUnavailability: (doctorId: number, body: UnavailabilityInput) =>
     request<Unavailability>(`/doctors/${doctorId}/unavailability`, { method: "POST", body }),
