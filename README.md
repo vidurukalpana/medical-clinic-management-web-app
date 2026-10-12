@@ -107,6 +107,16 @@ The Ollama desktop app keeps the server running at `http://127.0.0.1:11434`; oth
 
 With the backend running, open a second Terminal in the `frontend` folder and run `npm install` and then `npm run dev`. Then open http://localhost:5173. See [frontend/README.md](frontend/README.md) for details.
 
+### Load demo data (optional)
+
+For local development, add fictional doctors with specialties and weekly sessions, plus demo patients booked into the next few days:
+
+```bash
+python -m app.db.demo_data
+```
+
+It also fills in empty profile fields for the two startup doctors, prints a random password for each new demo doctor account, and is safe to run again. Demo patients use phone numbers starting `070 000 0`. Never run it against a real clinic database.
+
 ### Run with PyCharm
 
 Select `.venv/bin/python` as the project interpreter. Create a Python Run Configuration with `main.py` as the script and the project folder as the working directory, then click **Run**. Starting `main.py` also initializes the database automatically.
@@ -150,9 +160,9 @@ Logged-in users can change their password with `PUT /api/auth/password`. They mu
 - `PUT /api/auth/password` — change the logged-in user's password.
 - `PUT /api/admin/users/{user_id}/password` — let an administrator reset a user's password.
 - `GET /api/admin/doctors` — list all profiles, including inactive doctors and staff fields (administrator only).
-- `GET /api/doctors` — publicly list active doctors (name and registration number only).
+- `GET /api/doctors` — publicly list active doctors: name, registration number, `specialty`, `qualifications`, `languages`, `bio`, `consultation_fee` (rupees, paid at the clinic) and `weekly_sessions` (active weekday, start and end times). Phone numbers are never included.
 - `GET /api/doctors/me` — return the logged-in doctor's profile.
-- `PATCH /api/doctors/me` — let a doctor update their own profile.
+- `PATCH /api/doctors/me` — let a doctor update their own profile, including the public fields above. Blank text fields are cleared.
 - `GET /api/doctors/{doctor_id}` — publicly return one active doctor profile.
 - `PATCH /api/doctors/{doctor_id}` — let an administrator update a doctor profile.
 
@@ -372,6 +382,11 @@ erDiagram
         string display_name
         string registration_number UK
         string phone
+        string specialty
+        string qualifications
+        string languages
+        string bio
+        int consultation_fee
         boolean is_active
     }
 

@@ -2,6 +2,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { CalendarX } from "lucide-react";
 import { api, type LiveSession } from "../../lib/api";
+import { usePublicDoctors } from "../../lib/hooks";
 import { formatDay, formatTime } from "../../lib/time";
 import { Avatar, EmptyState, ErrorNote, Spinner } from "../../components/ui";
 
@@ -78,9 +79,9 @@ export function LivePage() {
 
   const isYours = (session: LiveSession) =>
     session.doctor_id === doctorId && !!startAt && Date.parse(session.start_at) === Date.parse(startAt);
-  const doctorTones = new Map<number, number>();
-  for (const session of live.data?.sessions ?? [])
-    if (!doctorTones.has(session.doctor_id)) doctorTones.set(session.doctor_id, doctorTones.size);
+  // Match each doctor's avatar colour on the other public pages.
+  const doctors = usePublicDoctors();
+  const toneOf = (doctorId: number) => Math.max(doctors.data?.findIndex((doctor) => doctor.id === doctorId) ?? 0, 0) % 6;
 
   return (
     <div className="container narrow-page">
@@ -110,7 +111,7 @@ export function LivePage() {
             <LiveCard
               key={`${session.doctor_id}-${session.start_at}`}
               session={session}
-              tone={doctorTones.get(session.doctor_id)! % 6}
+              tone={toneOf(session.doctor_id)}
               yourNumber={isYours(session) ? yourNumber : null}
             />
           ))}

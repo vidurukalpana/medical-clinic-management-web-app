@@ -4,6 +4,7 @@ import { Pencil, Power, UserPlus, KeyRound, Stethoscope, ShieldCheck, UserRound 
 import { api, type Doctor, type DoctorProfileInput, type Role, type User } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { Avatar, Button, Card, EmptyState, ErrorNote, Field, Modal, PageHeader, Pagination, Spinner } from "../../components/ui";
+import { DoctorProfileFields as PublicProfileFields, profileForm, profilePayload } from "../../components/DoctorProfileFields";
 import { useToast } from "../../components/Toast";
 
 const ROLE_META: Record<Role, { label: string; icon: typeof ShieldCheck }> = {
@@ -20,12 +21,14 @@ function DoctorEditModal({ doctor, onClose }: { doctor: Doctor; onClose: () => v
     registration_number: doctor.registration_number,
     phone: doctor.phone ?? "",
   });
+  const [profile, setProfile] = useState(profileForm(doctor));
   const mutation = useMutation({
     mutationFn: () =>
       api.updateDoctor(doctor.id, {
         display_name: form.display_name.trim(),
         registration_number: form.registration_number.trim(),
         phone: form.phone.trim() || null,
+        ...profilePayload(profile),
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-doctors"] });
@@ -35,7 +38,7 @@ function DoctorEditModal({ doctor, onClose }: { doctor: Doctor; onClose: () => v
     },
   });
   return (
-    <Modal open title="Edit doctor profile" onClose={onClose}>
+    <Modal open wide title="Edit doctor profile" onClose={onClose}>
       <form
         className="stack"
         onSubmit={(event: FormEvent) => {
@@ -52,6 +55,8 @@ function DoctorEditModal({ doctor, onClose }: { doctor: Doctor; onClose: () => v
         <Field label="Phone" hint="Staff only, never shown publicly">
           <input className="input" value={form.phone} maxLength={30} onChange={(event) => setForm({ ...form, phone: event.target.value })} />
         </Field>
+        <h4 className="list-title small-title">Shown to patients</h4>
+        <PublicProfileFields value={profile} onChange={setProfile} />
         <ErrorNote error={mutation.error} />
         <div className="modal-foot-inline">
           <Button type="button" variant="ghost" onClick={onClose}>
@@ -98,6 +103,7 @@ export function DoctorsPage() {
                 <Avatar name={doctor.display_name} size={52} tone={index % 6} />
                 <div>
                   <h3>{doctor.display_name}</h3>
+                  <span className="doctor-specialty">{doctor.specialty ?? "No specialty set"}</span>
                   <span className="muted mono small">Reg. {doctor.registration_number}</span>
                 </div>
                 <span className={`chip ${doctor.is_active ? "chip-green" : ""}`}>{doctor.is_active ? "Active" : "Inactive"}</span>

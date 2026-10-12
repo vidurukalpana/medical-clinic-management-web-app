@@ -5,7 +5,16 @@ export type AppointmentStatus = "scheduled" | "completed" | "cancelled" | "no_sh
 export type VisitStatus = "waiting" | "in_progress" | "completed" | "cancelled";
 export type Gender = "female" | "male" | "other" | "not_specified";
 
-export interface Doctor {
+/** Public profile details shown to patients. */
+export interface DoctorProfile {
+  specialty: string | null;
+  qualifications: string | null;
+  languages: string | null;
+  bio: string | null;
+  /** In rupees, paid at the clinic. */
+  consultation_fee: number | null;
+}
+export interface Doctor extends DoctorProfile {
   id: number;
   user_id: number;
   display_name: string;
@@ -13,10 +22,16 @@ export interface Doctor {
   phone: string | null;
   is_active: boolean;
 }
-export interface PublicDoctor {
+export interface WeeklySession {
+  weekday: number;
+  start_time: string;
+  end_time: string;
+}
+export interface PublicDoctor extends DoctorProfile {
   id: number;
   display_name: string;
   registration_number: string;
+  weekly_sessions: WeeklySession[];
 }
 export interface User {
   id: number;
@@ -303,7 +318,7 @@ export const api = {
   publicDoctors: () => request<PublicDoctor[]>("/doctors", { auth: false }),
   allDoctors: () => request<Doctor[]>("/admin/doctors"),
   myDoctorProfile: () => request<Doctor>("/doctors/me"),
-  updateMyDoctorProfile: (body: { display_name?: string; phone?: string | null }) =>
+  updateMyDoctorProfile: (body: { display_name?: string; phone?: string | null } & Partial<DoctorProfile>) =>
     request<Doctor>("/doctors/me", { method: "PATCH", body }),
   updateDoctor: (id: number, body: Partial<Omit<Doctor, "id" | "user_id">>) =>
     request<Doctor>(`/doctors/${id}`, { method: "PATCH", body }),
