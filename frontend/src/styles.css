@@ -2082,7 +2082,7 @@ textarea.input {
 .sidebar-user.active {
   background: var(--slate-50);
 }
-.sidebar-user > span {
+.sidebar-user-text {
   display: flex;
   flex-direction: column;
   flex: 1;
