@@ -10,6 +10,7 @@ import {
   Check,
   X,
   LogIn,
+  LogOut,
   UserX,
   Coffee,
 } from "lucide-react";
@@ -99,25 +100,44 @@ const queueLabel = (visit: DashboardVisit) =>
 function SessionBar({ queue }: { queue: DoctorQueue }) {
   const queryClient = useQueryClient();
   const toast = useToast();
-  const arrive = useMutation({
-    mutationFn: () => api.markDoctorArrived(queue.doctor_id, queue.session!.start_at),
-    onSuccess: () => {
+  const attendance = useMutation({
+    mutationFn: (step: "arrived" | "left") =>
+      step === "arrived"
+        ? api.markDoctorArrived(queue.doctor_id, queue.session!.start_at)
+        : api.markDoctorLeft(queue.doctor_id, queue.session!.start_at),
+    onSuccess: (_, step) => {
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
-      toast(`${queue.doctor_name} marked as arrived`);
+      toast(`${queue.doctor_name} marked as ${step}`);
     },
     onError: (error) => toast((error as Error).message, "error"),
   });
   if (!queue.session) return <div className="session-bar muted small">No more sessions today</div>;
-  const { start_at, end_at, doctor_arrived_at } = queue.session;
+  const { start_at, end_at, doctor_arrived_at, doctor_left_at } = queue.session;
+  const busy = (step: string) => attendance.isPending && attendance.variables === step;
+  const leave = () => {
+    const question = queue.waiting_count
+      ? `${queue.waiting_count} patients are still waiting. Mark ${queue.doctor_name} as left?`
+      : `Mark ${queue.doctor_name} as left?`;
+    if (window.confirm(question)) attendance.mutate("left");
+  };
   return (
     <div className="session-bar">
       <span className="small">
         {formatTime(start_at)} – {formatTime(end_at)} session
       </span>
-      {doctor_arrived_at ? (
-        <span className="chip chip-green">Doctor in since {formatTime(doctor_arrived_at)}</span>
+      {doctor_left_at ? (
+        <span className="chip">
+          Doctor in {formatTime(doctor_arrived_at)} – {formatTime(doctor_left_at)}
+        </span>
+      ) : doctor_arrived_at ? (
+        <span className="session-bar-actions">
+          <span className="chip chip-green">In since {formatTime(doctor_arrived_at)}</span>
+          <Button size="sm" variant="ghost" icon={<LogOut size={14} />} loading={busy("left")} onClick={leave}>
+            Doctor left
+          </Button>
+        </span>
       ) : (
-        <Button size="sm" variant="secondary" icon={<LogIn size={14} />} loading={arrive.isPending} onClick={() => arrive.mutate()}>
+        <Button size="sm" variant="secondary" icon={<LogIn size={14} />} loading={busy("arrived")} onClick={() => attendance.mutate("arrived")}>
           Doctor arrived
         </Button>
       )}

@@ -57,7 +57,9 @@ function LiveCard({ session, tone, yourNumber }: { session: LiveSession; tone: n
           {session.status === "not_started"
             ? `Starts at ${formatTime(session.start_at)}.`
             : session.status === "ended"
-              ? "This session has ended."
+              ? session.doctor_left_at
+                ? `This session has ended. The doctor left at ${formatTime(session.doctor_left_at)}.`
+                : "This session has ended."
               : "This session is cancelled. If you had a booking, you can move it to another date from Manage booking."}
         </p>
       )}

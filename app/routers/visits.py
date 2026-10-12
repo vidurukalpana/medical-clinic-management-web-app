@@ -117,3 +117,13 @@ def mark_doctor_arrived(
     doctor = appointments.get_booking_doctor(db, doctor_id, lock=True)
     require_visit_manager(doctor, user)
     return visits.mark_doctor_arrived(db, doctor, data.start_at, settings.timezone)
+
+
+@router.post("/doctors/{doctor_id}/sessions/leave", response_model=SessionArrivalRead)
+def mark_doctor_left(
+    doctor_id: int, data: SessionArrive, user: CurrentUser, db: DatabaseSession, settings: AppSettings,
+) -> SessionArrivalRead:
+    """Record when the doctor left today's session; refused while a patient is still with them."""
+    doctor = appointments.get_booking_doctor(db, doctor_id, lock=True)
+    require_visit_manager(doctor, user)
+    return visits.mark_doctor_left(db, doctor, data.start_at, settings.timezone)

@@ -3406,3 +3406,8 @@ td .action-row {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.session-bar-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}

@@ -622,3 +622,34 @@ def test_doctor_arrival_and_consultation_times_are_recorded(client, opd, monkeyp
     live = {s["doctor_id"]: s for s in client.get("/api/live-queue").json()["sessions"]}
     assert datetime.fromisoformat(live[other_id]["doctor_arrived_at"]) == clock["now"]
     assert live[doctor_id]["status"] == "in_progress"
+    leave = f"/api/doctors/{other_id}/sessions/leave"
+    assert client.post(leave, headers=headers, json={"start_at": "2030-01-07T10:00:00+05:30"}).status_code == 404
+    # Not while a patient is with the doctor.
+    assert client.post(leave, headers=headers, json={"start_at": session_start}).status_code == 409
+    client.patch(f"/api/visits/{other_visit['id']}", headers=headers, json={"status": "completed"})
+    clock["now"] = datetime(2030, 1, 7, 9, 40, tzinfo=zone)
+    left = client.post(leave, headers=headers, json={"start_at": session_start})
+    assert left.status_code == 200
+    assert datetime.fromisoformat(left.json()["doctor_left_at"]) == clock["now"]
+    clock["now"] = datetime(2030, 1, 7, 9, 45, tzinfo=zone)
+    assert datetime.fromisoformat(client.post(leave, headers=headers, json={"start_at": session_start})
+                                  .json()["doctor_left_at"]) == datetime(2030, 1, 7, 9, 40, tzinfo=zone)
+
+    # Running late: with a patient still waiting, the session goes on past 11:00 until the doctor leaves.
+    assert walk_in(client, headers, doctor_id, patients[2]).status_code == 201
+    clock["now"] = datetime(2030, 1, 7, 11, 30, tzinfo=zone)
+    queues = {q["doctor_id"]: q for q in client.get("/api/dashboard", headers=headers).json()["doctor_queues"]}
+    assert datetime.fromisoformat(queues[doctor_id]["session"]["start_at"]) == datetime(2030, 1, 7, 9, tzinfo=zone)
+    assert queues[doctor_id]["session"]["doctor_left_at"] is None
+    assert queues[other_id]["session"]["doctor_left_at"] is not None
+    live = {s["doctor_id"]: s for s in client.get("/api/live-queue").json()["sessions"]}
+    assert (live[doctor_id]["status"], live[other_id]["status"]) == ("in_progress", "ended")
+    # A forgotten "Doctor left" does not keep the public page saying "In session" all day.
+    clock["now"] = datetime(2030, 1, 7, 13, 30, tzinfo=zone)
+    assert {s["doctor_id"]: s for s in client.get("/api/live-queue").json()["sessions"]}[doctor_id]["status"] == "ended"
+
+
+def test_doctor_cannot_leave_before_arriving(client, opd):
+    headers, doctors, _ = opd
+    assert client.post(f"/api/doctors/{doctors[0]['id']}/sessions/leave", headers=headers,
+                       json={"start_at": "2030-01-07T09:00:00+05:30"}).status_code == 409

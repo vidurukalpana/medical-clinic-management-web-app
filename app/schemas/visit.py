@@ -78,6 +78,7 @@ class QueueSession(BaseModel):
     start_at: datetime
     end_at: datetime
     doctor_arrived_at: datetime | None
+    doctor_left_at: datetime | None
 
 
 class SeenVisit(BaseModel):
@@ -128,6 +129,7 @@ class LiveSession(BaseModel):
     end_at: datetime
     status: Literal["not_started", "in_progress", "ended", "unavailable"]
     doctor_arrived_at: datetime | None
+    doctor_left_at: datetime | None
     now_serving: int | None
     numbers_to_see: list[int]
 
@@ -147,3 +149,4 @@ class SessionArrive(BaseModel):
 class SessionArrivalRead(BaseModel):
     start_at: datetime
     doctor_arrived_at: datetime
+    doctor_left_at: datetime | None

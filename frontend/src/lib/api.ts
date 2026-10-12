@@ -146,6 +146,12 @@ export interface DashboardVisit extends Visit {
 }
 export interface QueueSession extends SessionTime {
   doctor_arrived_at: string | null;
+  doctor_left_at: string | null;
+}
+export interface SessionAttendance {
+  start_at: string;
+  doctor_arrived_at: string;
+  doctor_left_at: string | null;
 }
 export interface SeenVisit {
   id: number;
@@ -207,6 +213,7 @@ export interface LiveSession extends SessionTime {
   doctor_name: string;
   status: "not_started" | "in_progress" | "ended" | "unavailable";
   doctor_arrived_at: string | null;
+  doctor_left_at: string | null;
   now_serving: number | null;
   numbers_to_see: number[];
 }
@@ -408,10 +415,9 @@ export const api = {
   noShowAppointment: (id: number) => request<Appointment>(`/appointments/${id}/no-show`, { method: "PUT" }),
   checkIn: (id: number) => request<Visit>(`/appointments/${id}/check-in`, { method: "POST", body: {} }),
   markDoctorArrived: (doctorId: number, start_at: string) =>
-    request<{ start_at: string; doctor_arrived_at: string }>(`/doctors/${doctorId}/sessions/arrive`, {
-      method: "POST",
-      body: { start_at },
-    }),
+    request<SessionAttendance>(`/doctors/${doctorId}/sessions/arrive`, { method: "POST", body: { start_at } }),
+  markDoctorLeft: (doctorId: number, start_at: string) =>
+    request<SessionAttendance>(`/doctors/${doctorId}/sessions/leave`, { method: "POST", body: { start_at } }),
   walkIn: (doctor_id: number, patient_id: number) =>
     request<Visit>("/visits/walk-in", { method: "POST", body: { doctor_id, patient_id } }),
 

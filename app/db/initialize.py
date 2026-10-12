@@ -183,6 +183,7 @@ def upgrade_booking_schema(
             connection.execute(text(f"ALTER TABLE visits ADD COLUMN IF NOT EXISTS {column} TIMESTAMP WITH TIME ZONE"))
         # New tables such as session_arrivals.
         Base.metadata.create_all(bind=connection)
+        connection.execute(text("ALTER TABLE session_arrivals ADD COLUMN IF NOT EXISTS left_at TIMESTAMP WITH TIME ZONE"))
         _upgrade_appointment_numbers(connection, timezone)
         if purge_clinical_data:
             connection.execute(text("ALTER TABLE appointments DROP COLUMN IF EXISTS reason"))

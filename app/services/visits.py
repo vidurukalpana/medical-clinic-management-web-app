@@ -18,6 +18,10 @@ from app.services.patients import get_patient
 from app.services.appointments import booking_sessions, next_appointment_number
 
 
+# How long past its scheduled end a session with patients still waiting counts as running late.
+RUNNING_LATE_LIMIT = timedelta(hours=2)
+
+
 def clinic_today(clinic_timezone: str) -> date:
     return datetime.now(ZoneInfo(clinic_timezone)).date()
 
@@ -269,7 +273,7 @@ def live_queue(db: Session, clinic_timezone: str) -> LiveQueueRead:
         .where(Appointment.doctor_id.in_(doctors), Appointment.status != "cancelled",
                Appointment.start_at >= day_start, Appointment.start_at < day_end)
     ).all()
-    arrivals = arrivals_on(db, list(doctors), day_start, day_end)
+    attendance = attendance_on(db, list(doctors), day_start, day_end)
     sessions = []
     for schedule in schedules:
         start = datetime.combine(day, schedule.start_time, now.tzinfo)
@@ -281,16 +285,23 @@ def live_queue(db: Session, clinic_timezone: str) -> LiveQueueRead:
             status = "unavailable"
         elif in_room:
             status = "in_progress"
+        elif attendance.get((schedule.doctor_id, start), (None, None))[1] is not None:
+            status = "ended"  # The doctor has left.
+        elif (schedule.doctor_id, start) in attendance and (end > now or (
+            now < end + RUNNING_LATE_LIMIT and any(row.visit_status == "waiting" for row in rows)
+        )):
+            status = "in_progress"  # Doctor in, between patients, or running late with patients waiting.
         elif end <= now:
             status = "ended"
-        elif (schedule.doctor_id, start) in arrivals or any(row.visit_status == "completed" for row in rows):
-            status = "in_progress"  # Doctor in, between patients.
+        elif any(row.visit_status == "completed" for row in rows):
+            status = "in_progress"
         else:
             status = "not_started"
+        arrived_at, left_at = attendance.get((schedule.doctor_id, start), (None, None))
         sessions.append(LiveSession(
             doctor_id=schedule.doctor_id, doctor_name=doctors[schedule.doctor_id].display_name,
             start_at=start, end_at=end, status=status,
-            doctor_arrived_at=arrivals.get((schedule.doctor_id, start)),
+            doctor_arrived_at=arrived_at, doctor_left_at=left_at,
             now_serving=max(in_room) if in_room else None,
             # Booked numbers not yet seen, whether or not they have arrived.
             numbers_to_see=sorted(
@@ -301,8 +312,10 @@ def live_queue(db: Session, clinic_timezone: str) -> LiveQueueRead:
     return LiveQueueRead(day=day, generated_at=now, sessions=sessions)
 
 
-def todays_sessions(db: Session, doctor_id: int, clinic_timezone: str) -> list[tuple[datetime, datetime]]:
-    """Today's sessions that have not ended and are not closed by time off."""
+def todays_sessions(
+    db: Session, doctor_id: int, clinic_timezone: str, *, include_ended: bool = False,
+) -> list[tuple[datetime, datetime]]:
+    """Today's sessions not closed by time off; only those not yet ended unless `include_ended`."""
     now = datetime.now(ZoneInfo(clinic_timezone))
     day = now.date()
     blocked = db.execute(select(DoctorUnavailability.start_at, DoctorUnavailability.end_at).where(
@@ -317,19 +330,20 @@ def todays_sessions(db: Session, doctor_id: int, clinic_timezone: str) -> list[t
     ).order_by(Availability.start_time)):
         start = datetime.combine(day, schedule.start_time, now.tzinfo)
         end = datetime.combine(day, schedule.end_time, now.tzinfo)
-        if end > now and not any(start < block_end and end > block_start for block_start, block_end in blocked):
+        if (include_ended or end > now) and not any(
+            start < block_end and end > block_start for block_start, block_end in blocked
+        ):
             sessions.append((start, end))
     return sessions
 
 
-def arrivals_on(
+def attendance_on(
     db: Session, doctor_ids: list[int], day_start: datetime, day_end: datetime,
-) -> dict[tuple[int, datetime], datetime]:
+) -> dict[tuple[int, datetime], tuple[datetime, datetime | None]]:
+    """(doctor, session start) -> (arrived at, left at)."""
     return {
-        (doctor_id, session_start): arrived_at
-        for doctor_id, session_start, arrived_at in db.execute(select(
-            SessionArrival.doctor_id, SessionArrival.session_start, SessionArrival.arrived_at,
-        ).where(
+        (row.doctor_id, row.session_start): (row.arrived_at, row.left_at)
+        for row in db.scalars(select(SessionArrival).where(
             SessionArrival.doctor_id.in_(doctor_ids),
             SessionArrival.session_start >= day_start, SessionArrival.session_start < day_end,
         ))
@@ -337,15 +351,26 @@ def arrivals_on(
 
 
 def queue_session(db: Session, doctor_id: int, clinic_timezone: str) -> QueueSession | None:
-    """The doctor's current or next session today, with the arrival time if recorded."""
-    sessions = todays_sessions(db, doctor_id, clinic_timezone)
+    """The session to show on the dashboard: one the doctor is still in, even past its end, else the next."""
+    now = datetime.now(timezone.utc)
+    sessions = todays_sessions(db, doctor_id, clinic_timezone, include_ended=True)
     if not sessions:
         return None
-    start, end = sessions[0]
-    arrived = db.scalar(select(SessionArrival.arrived_at).where(
-        SessionArrival.doctor_id == doctor_id, SessionArrival.session_start == start,
-    ))
-    return QueueSession(start_at=start, end_at=end, doctor_arrived_at=arrived)
+    attendance = attendance_on(db, [doctor_id], sessions[0][0], sessions[-1][1])
+
+    def view(start: datetime, end: datetime) -> QueueSession:
+        arrived_at, left_at = attendance.get((doctor_id, start), (None, None))
+        return QueueSession(start_at=start, end_at=end, doctor_arrived_at=arrived_at, doctor_left_at=left_at)
+
+    # A session the doctor is still in, even past its end, so staff can record when they leave.
+    still_in = [(start, end) for start, end in sessions
+                if (doctor_id, start) in attendance and attendance[(doctor_id, start)][1] is None]
+    if still_in:
+        return view(*still_in[-1])
+    upcoming = [(start, end) for start, end in sessions
+                if end > now and attendance.get((doctor_id, start), (None, None))[1] is None]
+    # Otherwise the current or next session, or the last one once all are over.
+    return view(*(upcoming[0] if upcoming else sessions[-1]))
 
 
 def record_arrival(db: Session, doctor_id: int, session_start: datetime, now: datetime) -> SessionArrival:
@@ -359,6 +384,11 @@ def record_arrival(db: Session, doctor_id: int, session_start: datetime, now: da
     return arrival
 
 
+def _attendance_read(arrival: SessionArrival) -> SessionArrivalRead:
+    return SessionArrivalRead(start_at=arrival.session_start, doctor_arrived_at=arrival.arrived_at,
+                              doctor_left_at=arrival.left_at)
+
+
 def mark_doctor_arrived(
     db: Session, doctor: Doctor, start_at: datetime, clinic_timezone: str,
 ) -> SessionArrivalRead:
@@ -366,4 +396,26 @@ def mark_doctor_arrived(
         raise NotFoundError("Session today")
     arrival = record_arrival(db, doctor.id, start_at, datetime.now(timezone.utc))
     db.commit()
-    return SessionArrivalRead(start_at=start_at, doctor_arrived_at=arrival.arrived_at)
+    return _attendance_read(arrival)
+
+
+def mark_doctor_left(
+    db: Session, doctor: Doctor, start_at: datetime, clinic_timezone: str,
+) -> SessionArrivalRead:
+    """Record when the doctor left; the first time recorded is kept."""
+    sessions = todays_sessions(db, doctor.id, clinic_timezone, include_ended=True)
+    if not any(start == start_at for start, _ in sessions):
+        raise NotFoundError("Session today")
+    arrival = db.scalar(select(SessionArrival).where(
+        SessionArrival.doctor_id == doctor.id, SessionArrival.session_start == start_at,
+    ))
+    if arrival is None:
+        raise ConflictError("Mark the doctor as arrived first.")
+    if arrival.left_at is None:
+        if db.scalar(select(Visit.id).join(Visit.appointment).where(
+            Visit.doctor_id == doctor.id, Visit.status == "in_progress", Appointment.start_at == start_at,
+        )):
+            raise ConflictError("A patient is still with the doctor. Complete that visit first.")
+        arrival.left_at = datetime.now(timezone.utc)
+        db.commit()
+    return _attendance_read(arrival)
