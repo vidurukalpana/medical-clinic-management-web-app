@@ -1,7 +1,28 @@
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from datetime import time
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+PROFILE_FIELDS = ("specialty", "qualifications", "languages", "bio", "consultation_fee")
 
 
-class DoctorRead(BaseModel):
+class DoctorProfile(BaseModel):
+    """Public profile details a doctor or administrator can edit."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    specialty: str | None = Field(default=None, max_length=80)
+    qualifications: str | None = Field(default=None, max_length=200)
+    languages: str | None = Field(default=None, max_length=120)
+    bio: str | None = Field(default=None, max_length=500)
+    consultation_fee: int | None = Field(default=None, ge=0, le=1_000_000)
+
+    @field_validator("specialty", "qualifications", "languages", "bio", mode="after")
+    @classmethod
+    def empty_text_is_none(cls, value: str | None) -> str | None:
+        return value or None
+
+
+class DoctorRead(DoctorProfile):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
@@ -12,7 +33,7 @@ class DoctorRead(BaseModel):
     is_active: bool
 
 
-class DoctorSelfUpdate(BaseModel):
+class DoctorSelfUpdate(DoctorProfile):
     display_name: str | None = Field(default=None, min_length=2, max_length=100)
     phone: str | None = Field(default=None, max_length=30)
 
@@ -43,9 +64,16 @@ class DoctorAdminUpdate(DoctorSelfUpdate):
         return self
 
 
-class DoctorPublicRead(BaseModel):
+class WeeklySession(BaseModel):
+    weekday: int
+    start_time: time
+    end_time: time
+
+
+class DoctorPublicRead(DoctorProfile):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
     display_name: str
     registration_number: str
+    weekly_sessions: list[WeeklySession]

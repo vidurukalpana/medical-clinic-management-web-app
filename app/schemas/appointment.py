@@ -25,6 +25,8 @@ class SessionTime(BaseModel):
 class BookingSession(SessionTime):
     max_patients: int
     remaining: int
+    # Places online booking may still take; the rest are kept for walk-ins and reception.
+    remaining_online: int
 
 
 class AppointmentRead(SessionTime):
@@ -39,6 +41,7 @@ class AppointmentRead(SessionTime):
 
 class BookingStatus(BaseModel):
     remaining_places: int
+    remaining_online_places: int
     is_fully_booked: bool
 
 

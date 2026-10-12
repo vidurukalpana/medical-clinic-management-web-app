@@ -5,6 +5,7 @@ import { KeyRound, Save } from "lucide-react";
 import { api } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { Avatar, Button, Card, ErrorNote, Field, PageHeader } from "../../components/ui";
+import { DoctorProfileFields, profileForm, profilePayload } from "../../components/DoctorProfileFields";
 import { useToast } from "../../components/Toast";
 
 export function ChangePasswordCard() {
@@ -61,8 +62,10 @@ function DoctorProfileCard() {
   const doctor = user!.doctor!;
   const [displayName, setDisplayName] = useState(doctor.display_name);
   const [phone, setPhone] = useState(doctor.phone ?? "");
+  const [profile, setProfile] = useState(profileForm(doctor));
   const mutation = useMutation({
-    mutationFn: () => api.updateMyDoctorProfile({ display_name: displayName.trim(), phone: phone.trim() || null }),
+    mutationFn: () =>
+      api.updateMyDoctorProfile({ display_name: displayName.trim(), phone: phone.trim() || null, ...profilePayload(profile) }),
     onSuccess: async () => {
       await refreshUser();
       toast("Profile saved");
@@ -88,6 +91,7 @@ function DoctorProfileCard() {
         <Field label="Registration number" hint="Only an administrator can change this">
           <input className="input mono" value={doctor.registration_number} disabled />
         </Field>
+        <DoctorProfileFields value={profile} onChange={setProfile} />
         <ErrorNote error={mutation.error} />
         <div>
           <Button type="submit" icon={<Save size={16} />} loading={mutation.isPending}>

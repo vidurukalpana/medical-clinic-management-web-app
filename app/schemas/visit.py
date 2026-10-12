@@ -95,3 +95,21 @@ class DashboardRead(BaseModel):
     summary: DashboardSummary
     appointments: list[DashboardAppointment]
     doctor_queues: list[DoctorQueue]
+
+
+class LiveSession(BaseModel):
+    """Public progress of one session: numbers only, never patient details."""
+
+    doctor_id: int
+    doctor_name: str
+    start_at: datetime
+    end_at: datetime
+    status: Literal["not_started", "in_progress", "ended", "unavailable"]
+    now_serving: int | None
+    numbers_to_see: list[int]
+
+
+class LiveQueueRead(BaseModel):
+    day: date
+    generated_at: datetime
+    sessions: list[LiveSession]

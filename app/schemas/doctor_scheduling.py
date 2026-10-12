@@ -8,12 +8,15 @@ class AvailabilityCreate(BaseModel):
     start_time: time
     end_time: time
     max_patients: int = Field(default=20, ge=1, le=200)
+    reserved_places: int = Field(default=0, ge=0, le=200)
     is_active: bool = True
 
     @model_validator(mode="after")
     def validate_working_period(self) -> "AvailabilityCreate":
         if _time_in_seconds(self.start_time) >= _time_in_seconds(self.end_time):
             raise ValueError("start_time must be earlier than end_time.")
+        if self.reserved_places > self.max_patients:
+            raise ValueError("reserved_places cannot be more than max_patients.")
         return self
 
 
@@ -26,6 +29,7 @@ class AvailabilityRead(BaseModel):
     start_time: time
     end_time: time
     max_patients: int
+    reserved_places: int
     is_active: bool
 
 

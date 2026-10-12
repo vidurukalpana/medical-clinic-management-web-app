@@ -8,7 +8,7 @@ from app.errors import ForbiddenError
 from app.errors.visits import save_visit
 from app.models import Doctor, User, UserRole, Visit
 from app.routers.appointments import AppSettings, ManagedAppointment
-from app.schemas.visit import DashboardRead, VisitCheckIn, VisitRead, VisitUpdate, WalkInCreate
+from app.schemas.visit import DashboardRead, LiveQueueRead, VisitCheckIn, VisitRead, VisitUpdate, WalkInCreate
 from app.services import appointments, visits
 
 router = APIRouter(tags=["OPD visits"])
@@ -97,3 +97,10 @@ def read_dashboard(
 ) -> DashboardRead:
     response.headers["Cache-Control"] = "no-store"
     return visits.dashboard(db, user, settings.timezone, doctor_id)
+
+
+@router.get("/live-queue", response_model=LiveQueueRead)
+def read_live_queue(db: DatabaseSession, settings: AppSettings, response: Response) -> LiveQueueRead:
+    """Public: which number each doctor is seeing today. Carries no patient details."""
+    response.headers["Cache-Control"] = "no-store"
+    return visits.live_queue(db, settings.timezone)

@@ -107,6 +107,16 @@ The Ollama desktop app keeps the server running at `http://127.0.0.1:11434`; oth
 
 With the backend running, open a second Terminal in the `frontend` folder and run `npm install` and then `npm run dev`. Then open http://localhost:5173. See [frontend/README.md](frontend/README.md) for details.
 
+### Load demo data (optional)
+
+For local development, add fictional doctors with specialties and weekly sessions, plus demo patients booked into the next few days:
+
+```bash
+python -m app.db.demo_data
+```
+
+It also fills in empty profile fields for the two startup doctors, prints a random password for each new demo doctor account, and is safe to run again. Demo patients use phone numbers starting `070 000 0`. Never run it against a real clinic database.
+
 ### Run with PyCharm
 
 Select `.venv/bin/python` as the project interpreter. Create a Python Run Configuration with `main.py` as the script and the project folder as the working directory, then click **Run**. Starting `main.py` also initializes the database automatically.
@@ -150,15 +160,15 @@ Logged-in users can change their password with `PUT /api/auth/password`. They mu
 - `PUT /api/auth/password` — change the logged-in user's password.
 - `PUT /api/admin/users/{user_id}/password` — let an administrator reset a user's password.
 - `GET /api/admin/doctors` — list all profiles, including inactive doctors and staff fields (administrator only).
-- `GET /api/doctors` — publicly list active doctors (name and registration number only).
+- `GET /api/doctors` — publicly list active doctors: name, registration number, `specialty`, `qualifications`, `languages`, `bio`, `consultation_fee` (rupees, paid at the clinic) and `weekly_sessions` (active weekday, start and end times). Phone numbers are never included.
 - `GET /api/doctors/me` — return the logged-in doctor's profile.
-- `PATCH /api/doctors/me` — let a doctor update their own profile.
+- `PATCH /api/doctors/me` — let a doctor update their own profile, including the public fields above. Blank text fields are cleared.
 - `GET /api/doctors/{doctor_id}` — publicly return one active doctor profile.
 - `PATCH /api/doctors/{doctor_id}` — let an administrator update a doctor profile.
 
 ## Staff doctor scheduling
 
-Availability records define a doctor's weekly consulting sessions: weekday, start and end time, and `max_patients` (1–200, default 20). There are no fixed times per patient. A booking takes a numbered place in a session and patients are seen in number order. Weekdays use `0` for Monday through `4` for Friday. Unavailability records use `start_at` and `end_at`, so they can block part of a day, a full day or several days.
+Availability records define a doctor's weekly consulting sessions: weekday, start and end time, `max_patients` (1–200, default 20) and `reserved_places` (default 0), the places kept for walk-ins and reception. Online bookings (guest and patient-account bookings and their reschedules) can fill only `max_patients − reserved_places`. Staff bookings and walk-ins can use every place. There are no fixed times per patient. A booking takes a numbered place in a session and patients are seen in number order. Weekdays use `0` for Monday through `4` for Friday. Unavailability records use `start_at` and `end_at`, so they can block part of a day, a full day or several days.
 
 - `GET /api/doctors/{doctor_id}/availability` — list weekly availability.
 - `POST /api/doctors/{doctor_id}/availability` — add an availability period.
@@ -209,9 +219,10 @@ No login is required for these endpoints:
 | --- | --- |
 | `GET /api/doctors` | Browse active doctors |
 | `GET /api/doctors/{doctor_id}` | View public doctor details |
-| `GET /api/doctors/{doctor_id}/sessions?day=2030-01-07` | List the day's sessions with `max_patients` and `remaining` places |
-| `GET /api/doctors/{doctor_id}/booking-status?day=2030-01-07` | Check `remaining_places` across the day |
+| `GET /api/doctors/{doctor_id}/sessions?day=2030-01-07` | List the day's sessions with `max_patients`, `remaining` places and `remaining_online` places |
+| `GET /api/doctors/{doctor_id}/booking-status?day=2030-01-07` | Check `remaining_places` and `remaining_online_places` across the day |
 | `POST /api/guest/appointments` | Book using name, phone, doctor and session |
+| `GET /api/live-queue` | Today's sessions: status, the number being seen and the numbers still to be seen. Numbers only, no patient details |
 
 Example guest request. `start_at` is the start of a listed session that has places left:
 
@@ -324,7 +335,7 @@ New installations create the revised schema automatically. Existing installation
 python -m app.db.initialize
 ```
 
-This adds guest-token/account ownership columns and makes birth date optional. It also moves older schemas to the current columns: each legacy `doctor_unavailability.unavailable_date` becomes a whole clinic-local day in `start_at`/`end_at`, and the legacy patient `sex` column is copied into `gender`. Sessions that used fixed-length slots get `max_patients` equal to their old slot count. Upcoming slot bookings move to the start and end of their session and are numbered in their old time order. Past and cancelled bookings keep their times. The command is safe to run repeatedly. It preserves existing rows, keeps the legacy columns (no longer required), and does not delete legacy clinical data.
+This adds guest-token/account ownership columns and makes birth date optional. It also moves older schemas to the current columns: each legacy `doctor_unavailability.unavailable_date` becomes a whole clinic-local day in `start_at`/`end_at`, and the legacy patient `sex` column is copied into `gender`. Sessions that used fixed-length slots get `max_patients` equal to their old slot count, and every session gets `reserved_places` 0. Upcoming slot bookings move to the start and end of their session and are numbered in their old time order. Past and cancelled bookings keep their times. The command is safe to run repeatedly. It preserves existing rows, keeps the legacy columns (no longer required), and does not delete legacy clinical data.
 
 To permanently remove the old clinical columns and their contents after the clinic has authorized their deletion, run:
 
@@ -371,6 +382,11 @@ erDiagram
         string display_name
         string registration_number UK
         string phone
+        string specialty
+        string qualifications
+        string languages
+        string bio
+        int consultation_fee
         boolean is_active
     }
 
@@ -392,6 +408,7 @@ erDiagram
         time start_time
         time end_time
         int max_patients
+        int reserved_places
         boolean is_active
     }
 

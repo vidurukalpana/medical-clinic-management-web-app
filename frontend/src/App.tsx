@@ -5,6 +5,8 @@ import { BookPage } from "./pages/public/BookPage";
 import { ManagePage } from "./pages/public/ManagePage";
 import { LoginPage, RegisterPage } from "./pages/public/AuthPages";
 import { MyBookingsPage } from "./pages/public/MyBookingsPage";
+import { LivePage } from "./pages/public/LivePage";
+import { DoctorsPage as PublicDoctorsPage } from "./pages/public/DoctorsPage";
 import { DashboardPage } from "./pages/staff/DashboardPage";
 import { AppointmentsPage } from "./pages/staff/AppointmentsPage";
 import { PatientsPage } from "./pages/staff/PatientsPage";
@@ -38,6 +40,8 @@ export default function App() {
       <Route element={<PublicLayout />}>
         <Route index element={<HomePage />} />
         <Route path="book" element={<BookPage />} />
+        <Route path="doctors" element={<PublicDoctorsPage />} />
+        <Route path="live" element={<LivePage />} />
         <Route path="manage" element={<ManagePage />} />
         <Route path="login" element={<LoginPage />} />
         <Route path="register" element={<RegisterPage />} />

@@ -122,10 +122,13 @@ def read_booking_status(
     db: DatabaseSession, settings: AppSettings,
 ) -> BookingStatus:
     doctor = appointments.get_booking_doctor(db, doctor_id)
-    remaining = sum(session.remaining for session in appointments.booking_sessions(
-        db, doctor, day, settings.timezone,
-    ))
-    return BookingStatus(remaining_places=remaining, is_fully_booked=not remaining)
+    sessions = appointments.booking_sessions(db, doctor, day, settings.timezone)
+    remaining = sum(session.remaining for session in sessions)
+    return BookingStatus(
+        remaining_places=remaining,
+        remaining_online_places=sum(session.remaining_online for session in sessions),
+        is_fully_booked=not remaining,
+    )
 
 
 @router.post("/guest/appointments", response_model=GuestBookingConfirmation, status_code=201)
@@ -134,12 +137,12 @@ def book_as_guest(
     response: Response, user: OptionalUser,
 ) -> GuestBookingConfirmation:
     doctor = appointments.get_booking_doctor(db, data.doctor_id, lock=True)
-    appointments.select_session(db, doctor, data.start_at, settings.timezone)
+    appointments.select_session(db, doctor, data.start_at, settings.timezone, online=True)
     # Never link an unverified guest to an existing patient by name or phone.
     patient = create_patient(db, PatientCreate(full_name=data.full_name, phone=data.phone), commit=False)
     appointment = appointments.create_appointment(db, doctor, AppointmentCreate(
         doctor_id=doctor.id, patient_id=patient.id, start_at=data.start_at,
-    ), settings.timezone)
+    ), settings.timezone, online=True)
     token = create_session_token()
     appointment.booked_by_user_id = user.id if user is not None else None
     appointment.guest_token_hash = hash_session_token(token)
@@ -189,7 +192,9 @@ def move_guest_booking(
     db: DatabaseSession, settings: AppSettings,
 ) -> GuestBookingRead:
     doctor, appointment = managed
-    appointments.reschedule_appointment(db, doctor, appointment, data.start_at, settings.timezone)
+    appointments.reschedule_appointment(
+        db, doctor, appointment, data.start_at, settings.timezone, online=True,
+    )
     save_appointment(db)
     return GuestBookingRead.model_validate(appointment)
 
@@ -232,6 +237,8 @@ def move_owned_booking(
     db: DatabaseSession, settings: AppSettings,
 ) -> GuestBookingRead:
     doctor, appointment = managed
-    appointments.reschedule_appointment(db, doctor, appointment, data.start_at, settings.timezone)
+    appointments.reschedule_appointment(
+        db, doctor, appointment, data.start_at, settings.timezone, online=True,
+    )
     save_appointment(db)
     return GuestBookingRead.model_validate(appointment)

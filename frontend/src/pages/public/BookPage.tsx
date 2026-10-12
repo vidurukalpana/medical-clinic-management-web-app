@@ -14,12 +14,14 @@ import {
   CalendarDays,
   Clock,
   Download,
+  Search,
 } from "lucide-react";
 import { api, type BookingSession, type GuestBookingConfirmation, type PublicDoctor } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { usePublicDoctors } from "../../lib/hooks";
+import { describeWeek, matchesSearch } from "../../lib/doctors";
 import { saveBooking } from "../../lib/savedBookings";
-import { clinicDate, formatDay, formatTime } from "../../lib/time";
+import { clinicDate, formatDay, formatTime, liveQueueLink } from "../../lib/time";
 import { SessionPicker } from "../../components/SessionPicker";
 import { Avatar, Button, EmptyState, ErrorNote, Field, Spinner } from "../../components/ui";
 import { useToast } from "../../components/Toast";
@@ -56,6 +58,7 @@ export function BookPage() {
   const [phone, setPhone] = useState("");
   const [remember, setRemember] = useState(false);
   const [confirmation, setConfirmation] = useState<GuestBookingConfirmation | null>(null);
+  const [doctorQuery, setDoctorQuery] = useState("");
 
   const doctor = doctors.data?.find((item) => item.id === doctorId) ?? null;
 
@@ -113,7 +116,23 @@ export function BookPage() {
                 <EmptyState title="No doctors are available for booking" />
               ) : (
                 <div className="choice-list">
-                  {doctors.data.map((item, index) => (
+                  {doctors.data.length > 4 && (
+                    <div className="input-icon">
+                      <Search size={16} />
+                      <input
+                        className="input"
+                        type="search"
+                        value={doctorQuery}
+                        placeholder="Search by name or specialty"
+                        aria-label="Search doctors"
+                        onChange={(event) => setDoctorQuery(event.target.value)}
+                      />
+                    </div>
+                  )}
+                  {doctors.data.filter((item) => matchesSearch(item, doctorQuery)).length === 0 && (
+                    <EmptyState title="No doctors match" hint="Try another name or specialty." />
+                  )}
+                  {doctors.data.map((item, index) => !matchesSearch(item, doctorQuery) ? null : (
                     <button
                       type="button"
                       key={item.id}
@@ -128,7 +147,10 @@ export function BookPage() {
                       <Avatar name={item.display_name} size={48} tone={index % 6} />
                       <span className="choice-text">
                         <strong>{item.display_name}</strong>
-                        <span className="muted mono">Reg. {item.registration_number}</span>
+                        <span className="doctor-specialty">{item.specialty ?? "Doctor"}</span>
+                        {item.weekly_sessions.length > 0 && (
+                          <span className="muted small">{describeWeek(item.weekly_sessions)}</span>
+                        )}
                       </span>
                       <ArrowRight size={18} className="choice-arrow" />
                     </button>
@@ -340,6 +362,11 @@ function Confirmation({ booking, doctor, remembered }: {
           <Link to={`/manage?id=${booking.id}`} className="btn btn-primary">
             Manage this booking
           </Link>
+          {day === clinicDate() && (
+            <Link to={liveQueueLink(booking)} className="btn btn-secondary">
+              See live queue
+            </Link>
+          )}
           <Link to="/" className="btn btn-ghost">
             Back to home
           </Link>

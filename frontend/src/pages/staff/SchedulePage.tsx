@@ -26,9 +26,10 @@ function AvailabilityModal({ doctorId, editing, defaultWeekday, onClose }: {
           start_time: editing.start_time.slice(0, 5),
           end_time: editing.end_time.slice(0, 5),
           max_patients: editing.max_patients,
+          reserved_places: editing.reserved_places,
           is_active: editing.is_active,
         }
-      : { weekday: defaultWeekday, start_time: "09:00", end_time: "12:00", max_patients: 20, is_active: true },
+      : { weekday: defaultWeekday, start_time: "09:00", end_time: "12:00", max_patients: 20, reserved_places: 0, is_active: true },
   );
   const mutation = useMutation({
     mutationFn: () =>
@@ -84,20 +85,36 @@ function AvailabilityModal({ doctorId, editing, defaultWeekday, onClose }: {
             />
           </Field>
         </div>
-        <Field
-          label="Patients per session"
-          hint={form.end_time > form.start_time ? "Patients get numbers 1, 2, 3… and are seen in that order" : "End must be after start"}
-        >
-          <input
-            className="input"
-            type="number"
-            min={1}
-            max={200}
-            value={form.max_patients}
-            onChange={(event) => setForm({ ...form, max_patients: Number(event.target.value) })}
-            required
-          />
-        </Field>
+        <div className="form-grid">
+          <Field
+            label="Patients per session"
+            hint={form.end_time > form.start_time ? "Seen in number order: 1, 2, 3…" : "End must be after start"}
+          >
+            <input
+              className="input"
+              type="number"
+              min={1}
+              max={200}
+              value={form.max_patients}
+              onChange={(event) => setForm({ ...form, max_patients: Number(event.target.value) })}
+              required
+            />
+          </Field>
+          <Field
+            label="Kept for walk-ins"
+            hint={`Online booking can take ${Math.max(form.max_patients - form.reserved_places, 0)} of ${form.max_patients}`}
+          >
+            <input
+              className="input"
+              type="number"
+              min={0}
+              max={form.max_patients}
+              value={form.reserved_places}
+              onChange={(event) => setForm({ ...form, reserved_places: Number(event.target.value) })}
+              required
+            />
+          </Field>
+        </div>
         <label className="check">
           <input
             type="checkbox"
@@ -253,7 +270,10 @@ export function SchedulePage() {
                           <strong>
                             {formatClock(session.start_time)} – {formatClock(session.end_time)}
                           </strong>
-                          <span className="small">Up to {session.max_patients} patients</span>
+                          <span className="small">
+                            Up to {session.max_patients} patients
+                            {session.reserved_places > 0 && ` · ${session.reserved_places} kept for walk-ins`}
+                          </span>
                           {!session.is_active && <span className="chip">Paused</span>}
                           <div className="session-tools">
                             <button className="icon-btn" aria-label="Edit session" onClick={() => setModal({ editing: session, weekday: day })}>

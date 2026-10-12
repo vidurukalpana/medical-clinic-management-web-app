@@ -13,9 +13,12 @@ import type { PublicDoctor } from "../../lib/api";
 import { useNextAvailable, usePublicDoctors } from "../../lib/hooks";
 import { addDays, clinicDate, formatDay, formatTime } from "../../lib/time";
 import { Avatar, EmptyState, ErrorNote, Spinner } from "../../components/ui";
+import { DoctorCard } from "../../components/DoctorCard";
+
+const HOME_DOCTORS = 3;
 
 const STEPS = [
-  { icon: Stethoscope, title: "Choose a doctor", text: "See who's in this week." },
+  { icon: Stethoscope, title: "Choose a doctor", text: "Search by name or specialty." },
   { icon: CalendarDays, title: "Pick a day", text: "You'll get your number right away." },
   { icon: KeyRound, title: "Keep your code", text: "Change or cancel anytime." },
 ];
@@ -77,8 +80,9 @@ export function HomePage() {
             <span className="eyebrow">Our doctors</span>
             <h2>Consulting this week</h2>
           </div>
-          <Link to="/book" className="link-arrow">
-            See all availability <ArrowRight size={16} />
+          <Link to="/doctors" className="link-arrow">
+            {doctors.data && doctors.data.length > HOME_DOCTORS ? `See all ${doctors.data.length} doctors` : "Find a doctor"}{" "}
+            <ArrowRight size={16} />
           </Link>
         </div>
         {doctors.isLoading ? (
@@ -89,17 +93,8 @@ export function HomePage() {
           <EmptyState title="No doctors are taking bookings right now" hint="Please check back soon." />
         ) : (
           <div className="doctor-grid">
-            {doctors.data.map((doctor, index) => (
-              <article key={doctor.id} className="doctor-card">
-                <Avatar name={doctor.display_name} size={64} tone={index % 6} />
-                <div>
-                  <h3>{doctor.display_name}</h3>
-                  <span className="muted mono">Reg. {doctor.registration_number}</span>
-                </div>
-                <Link to={`/book?doctor=${doctor.id}`} className="btn btn-primary btn-sm">
-                  Book with {doctor.display_name.split(" ")[0]} <ArrowRight size={15} />
-                </Link>
-              </article>
+            {doctors.data.slice(0, HOME_DOCTORS).map((doctor, index) => (
+              <DoctorCard key={doctor.id} doctor={doctor} tone={index % 6} />
             ))}
           </div>
         )}
@@ -145,7 +140,7 @@ function HeroVisual({ doctors }: { doctors: PublicDoctor[] | undefined }) {
               <Avatar name={found.doctor.display_name} size={44} tone={found.doctorIndex % 6} />
               <div>
                 <strong>{found.doctor.display_name}</strong>
-                <span className="muted">Registered doctor</span>
+                <span className="muted">{found.doctor.specialty ?? "Registered doctor"}</span>
               </div>
             </div>
             <div className="fc-when">
@@ -174,8 +169,8 @@ function HeroVisual({ doctors }: { doctors: PublicDoctor[] | undefined }) {
       {found && (
         <div className="float-card float-card-queue">
           <small>{dayLabel(found.day)}</small>
-          <strong className="queue-num">{String(found.session.remaining).padStart(2, "0")}</strong>
-          <span className="muted">{found.session.remaining === 1 ? "place left" : "places left"}</span>
+          <strong className="queue-num">{String(found.session.remaining_online).padStart(2, "0")}</strong>
+          <span className="muted">{found.session.remaining_online === 1 ? "place left" : "places left"}</span>
         </div>
       )}
       <div className="float-card float-card-mini">

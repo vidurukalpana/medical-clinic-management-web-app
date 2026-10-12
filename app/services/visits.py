@@ -5,11 +5,14 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.errors import BadRequestError, ConflictError, DoctorFullyBookedError, ForbiddenError, NotFoundError
-from app.models import Appointment, Doctor, Patient, User, UserRole, Visit
+from app.models import (
+    Appointment, Availability, Doctor, DoctorUnavailability, Patient, User, UserRole, Visit,
+)
 from app.schemas.visit import (
     DashboardAction, DashboardAppointment, DashboardRead, DashboardSummary,
-    DashboardVisit, DoctorQueue, VisitUpdate,
+    DashboardVisit, DoctorQueue, LiveQueueRead, LiveSession, VisitUpdate,
 )
+from app.services.doctors import list_doctors
 from app.services.patients import get_patient
 from app.services.appointments import booking_sessions, next_appointment_number
 
@@ -218,3 +221,59 @@ def dashboard(
             patients=queues[doctor.id],
         ) for doctor in doctors],
     )
+
+
+def live_queue(db: Session, clinic_timezone: str) -> LiveQueueRead:
+    """Today's sessions with the number in the doctor's room and the numbers still to be seen."""
+    now = datetime.now(ZoneInfo(clinic_timezone))
+    day = now.date()
+    day_start = datetime.combine(day, time.min, now.tzinfo)
+    day_end = datetime.combine(day + timedelta(days=1), time.min, now.tzinfo)
+    doctors = {doctor.id: doctor for doctor in list_doctors(db)}
+    schedules = db.scalars(select(Availability).where(
+        Availability.doctor_id.in_(doctors),
+        Availability.weekday == day.weekday(),
+        Availability.is_active.is_(True),
+    ).order_by(Availability.start_time, Availability.doctor_id))
+    blocked = db.execute(select(
+        DoctorUnavailability.doctor_id, DoctorUnavailability.start_at, DoctorUnavailability.end_at,
+    ).where(
+        DoctorUnavailability.doctor_id.in_(doctors),
+        DoctorUnavailability.start_at < day_end,
+        DoctorUnavailability.end_at > day_start,
+    )).all()
+    bookings = db.execute(
+        select(Appointment.doctor_id, Appointment.start_at, Appointment.appointment_number,
+               Appointment.status, Visit.status.label("visit_status"))
+        .outerjoin(Visit, Visit.appointment_id == Appointment.id)
+        .where(Appointment.doctor_id.in_(doctors), Appointment.status != "cancelled",
+               Appointment.start_at >= day_start, Appointment.start_at < day_end)
+    ).all()
+    sessions = []
+    for schedule in schedules:
+        start = datetime.combine(day, schedule.start_time, now.tzinfo)
+        end = datetime.combine(day, schedule.end_time, now.tzinfo)
+        rows = [row for row in bookings if row.doctor_id == schedule.doctor_id and row.start_at == start]
+        in_room = [row.appointment_number for row in rows if row.visit_status == "in_progress"]
+        if any(doctor_id == schedule.doctor_id and block_start < end and block_end > start
+               for doctor_id, block_start, block_end in blocked):
+            status = "unavailable"
+        elif in_room:
+            status = "in_progress"
+        elif end <= now:
+            status = "ended"
+        elif any(row.visit_status == "completed" for row in rows):
+            status = "in_progress"  # Between patients.
+        else:
+            status = "not_started"
+        sessions.append(LiveSession(
+            doctor_id=schedule.doctor_id, doctor_name=doctors[schedule.doctor_id].display_name,
+            start_at=start, end_at=end, status=status,
+            now_serving=max(in_room) if in_room else None,
+            # Booked numbers not yet seen, whether or not they have arrived.
+            numbers_to_see=sorted(
+                row.appointment_number for row in rows
+                if row.status == "scheduled" and row.visit_status in (None, "waiting")
+            ),
+        ))
+    return LiveQueueRead(day=day, generated_at=now, sessions=sessions)

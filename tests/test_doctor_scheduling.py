@@ -126,6 +126,11 @@ def test_availability_validation_rejects_weekends_and_invalid_periods(
         headers=headers,
         json=availability_payload(max_patients=201),
     )
+    reserving_too_many = client.post(
+        base_url,
+        headers=headers,
+        json=availability_payload(max_patients=10, reserved_places=11),
+    )
     weekend = client.post(
         base_url,
         headers=headers,
@@ -135,6 +140,7 @@ def test_availability_validation_rejects_weekends_and_invalid_periods(
     assert reversed_hours.status_code == 422
     assert no_patients.status_code == 422
     assert too_many_patients.status_code == 422
+    assert reserving_too_many.status_code == 422
     assert weekend.status_code == 422
 
 
@@ -283,9 +289,9 @@ def test_default_session_limit(client, test_settings):
     del payload["max_patients"]
     response = client.post("/api/doctors/1/availability", headers=headers, json=payload)
     assert response.status_code == 201
-    assert response.json()["max_patients"] == 20
+    assert (response.json()["max_patients"], response.json()["reserved_places"]) == (20, 0)
     from datetime import date, timedelta
     day = date.today() + timedelta(days=7)
     day += timedelta(days=-day.weekday())
     sessions = client.get(f"/api/doctors/1/sessions?day={day}", headers=headers).json()
-    assert [(s["max_patients"], s["remaining"]) for s in sessions] == [(20, 20)]
+    assert [(s["max_patients"], s["remaining"], s["remaining_online"]) for s in sessions] == [(20, 20, 20)]

@@ -136,6 +136,12 @@ def _doctor_schedules(db: Session, zone: ZoneInfo, now: datetime) -> str:
     ]
     for doctor in doctors:
         lines.append(f"### {doctor.display_name}")
+        if doctor.specialty:
+            lines.append(f"Specialty: {doctor.specialty}.")
+        if doctor.languages:
+            lines.append(f"Speaks: {doctor.languages}.")
+        if doctor.consultation_fee is not None:
+            lines.append(f"Consultation fee: Rs. {doctor.consultation_fee:,}, paid at the clinic.")
         hours = db.scalars(select(Availability).where(
             Availability.doctor_id == doctor.id,
             Availability.is_active.is_(True),

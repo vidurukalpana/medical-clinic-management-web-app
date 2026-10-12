@@ -5,7 +5,16 @@ export type AppointmentStatus = "scheduled" | "completed" | "cancelled" | "no_sh
 export type VisitStatus = "waiting" | "in_progress" | "completed" | "cancelled";
 export type Gender = "female" | "male" | "other" | "not_specified";
 
-export interface Doctor {
+/** Public profile details shown to patients. */
+export interface DoctorProfile {
+  specialty: string | null;
+  qualifications: string | null;
+  languages: string | null;
+  bio: string | null;
+  /** In rupees, paid at the clinic. */
+  consultation_fee: number | null;
+}
+export interface Doctor extends DoctorProfile {
   id: number;
   user_id: number;
   display_name: string;
@@ -13,10 +22,16 @@ export interface Doctor {
   phone: string | null;
   is_active: boolean;
 }
-export interface PublicDoctor {
+export interface WeeklySession {
+  weekday: number;
+  start_time: string;
+  end_time: string;
+}
+export interface PublicDoctor extends DoctorProfile {
   id: number;
   display_name: string;
   registration_number: string;
+  weekly_sessions: WeeklySession[];
 }
 export interface User {
   id: number;
@@ -47,9 +62,12 @@ export interface SessionTime {
 export interface BookingSession extends SessionTime {
   max_patients: number;
   remaining: number;
+  /** Places online booking may still take; the rest are kept for walk-ins and reception. */
+  remaining_online: number;
 }
 export interface BookingStatus {
   remaining_places: number;
+  remaining_online_places: number;
   is_fully_booked: boolean;
 }
 export interface Appointment extends SessionTime {
@@ -147,6 +165,7 @@ export interface Availability {
   start_time: string;
   end_time: string;
   max_patients: number;
+  reserved_places: number;
   is_active: boolean;
 }
 export type AvailabilityInput = Omit<Availability, "id" | "doctor_id">;
@@ -158,6 +177,19 @@ export interface Unavailability {
   reason: string | null;
 }
 export type UnavailabilityInput = Omit<Unavailability, "id" | "doctor_id">;
+/** Public progress of one of today's sessions: numbers only, never patient details. */
+export interface LiveSession extends SessionTime {
+  doctor_id: number;
+  doctor_name: string;
+  status: "not_started" | "in_progress" | "ended" | "unavailable";
+  now_serving: number | null;
+  numbers_to_see: number[];
+}
+export interface LiveQueue {
+  day: string;
+  generated_at: string;
+  sessions: LiveSession[];
+}
 export interface ClinicContactDetails {
   name: string;
   address_lines: string[];
@@ -286,7 +318,7 @@ export const api = {
   publicDoctors: () => request<PublicDoctor[]>("/doctors", { auth: false }),
   allDoctors: () => request<Doctor[]>("/admin/doctors"),
   myDoctorProfile: () => request<Doctor>("/doctors/me"),
-  updateMyDoctorProfile: (body: { display_name?: string; phone?: string | null }) =>
+  updateMyDoctorProfile: (body: { display_name?: string; phone?: string | null } & Partial<DoctorProfile>) =>
     request<Doctor>("/doctors/me", { method: "PATCH", body }),
   updateDoctor: (id: number, body: Partial<Omit<Doctor, "id" | "user_id">>) =>
     request<Doctor>(`/doctors/${id}`, { method: "PATCH", body }),
@@ -294,6 +326,7 @@ export const api = {
   // Sessions
   sessions: (doctorId: number, day: string) =>
     request<BookingSession[]>(`/doctors/${doctorId}/sessions`, { query: { day }, auth: false }),
+  liveQueue: () => request<LiveQueue>("/live-queue", { auth: false }),
   bookingStatus: (doctorId: number, day: string) =>
     request<BookingStatus>(`/doctors/${doctorId}/booking-status`, { query: { day }, auth: false }),
 

@@ -245,6 +245,7 @@ export function BookAppointmentModal({ open, onClose, initialPatient }: {
         </div>
         {doctorId && (
           <SessionPicker
+            staff
             doctorId={doctorId}
             day={day}
             onDayChange={(next) => {

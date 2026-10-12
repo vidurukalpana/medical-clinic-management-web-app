@@ -189,6 +189,37 @@ def test_equivalent_timezone_books_the_same_session(client, booking):
     assert change_session(client, headers, payload, is_active=False).status_code == 409
 
 
+def test_reserved_places_are_kept_from_online_booking(client, booking):
+    headers, payload, sessions_url = booking
+    assert change_session(client, headers, payload, reserved_places=1).status_code == 200
+    session = client.get(sessions_url).json()[0]
+    assert (session["remaining"], session["remaining_online"]) == (3, 2)
+    guest = {"doctor_id": payload["doctor_id"], "start_at": payload["start_at"],
+             "full_name": "Online Patient", "phone": "0771234567"}
+    online = [client.post("/api/guest/appointments", json=guest) for _ in range(2)]
+    assert [r.json()["appointment_number"] for r in online] == [1, 2]
+    blocked = client.post("/api/guest/appointments", json=guest)
+    assert blocked.status_code == 409
+    assert "Online booking for this session is full" in blocked.json()["detail"]
+    day = payload["start_at"][:10]
+    status_url = f"/api/doctors/{payload['doctor_id']}/booking-status?day={day}"
+    assert client.get(status_url).json() == {
+        "remaining_places": 1, "remaining_online_places": 0, "is_fully_booked": False,
+    }
+
+    # Online bookings cannot move into a session whose online places are taken.
+    tuesday = add_tuesday_session(client, headers, payload)
+    moving = client.post("/api/guest/appointments", json={**guest, "start_at": tuesday}).json()
+    assert client.put(f"/api/guest/appointments/{moving['id']}/reschedule",
+                      headers={"X-Booking-Token": moving["management_token"]},
+                      json={"start_at": payload["start_at"]}).status_code == 409
+    # Reception can still use the kept place.
+    staff = client.post("/api/appointments", headers=headers, json=payload)
+    assert staff.status_code == 201
+    assert staff.json()["appointment_number"] == 3
+    assert client.get(status_url).json()["is_fully_booked"] is True
+
+
 def test_guest_booking_private_management_and_minimal_data(client, booking):
     headers, payload, _ = booking
     data = {"doctor_id": payload["doctor_id"], "start_at": payload["start_at"],
@@ -263,7 +294,10 @@ def test_optional_patient_accounts_are_isolated_from_staff(client, booking):
 def test_public_doctors_hide_staff_fields(client):
     doctors = client.get("/api/doctors")
     assert doctors.status_code == 200
-    assert set(doctors.json()[0]) == {"id", "display_name", "registration_number"}
+    assert set(doctors.json()[0]) == {
+        "id", "display_name", "registration_number", "specialty", "qualifications",
+        "languages", "bio", "consultation_fee", "weekly_sessions",
+    }
     assert client.get(f"/api/doctors/{doctors.json()[0]['id']}").status_code == 200
 
 
@@ -434,3 +468,49 @@ def test_schema_upgrade_moves_slot_bookings_into_numbered_sessions(client, booki
     assert remaining(client, sessions_url) == [1]
     added = client.post("/api/appointments", headers=headers, json=payload)
     assert added.json()["appointment_number"] == 4
+
+
+def test_doctor_public_profile_and_weekly_sessions(client, booking, test_settings):
+    headers, payload, _ = booking
+    doctor_url = f"/api/doctors/{payload['doctor_id']}"
+    updated = client.patch(doctor_url, headers=headers, json={
+        "specialty": " Consultant Paediatrician ", "qualifications": "MBBS (Colombo), MD (Paediatrics)",
+        "languages": "Sinhala, English", "bio": "", "consultation_fee": 2500,
+    })
+    assert updated.status_code == 200
+    assert (updated.json()["specialty"], updated.json()["bio"]) == ("Consultant Paediatrician", None)
+    assert client.patch(doctor_url, headers=headers, json={"consultation_fee": -1}).status_code == 422
+    # A paused session is not advertised.
+    assert client.post(f"{doctor_url}/availability", headers=headers, json=availability_payload(
+        weekday=2, start_time="17:00:00", end_time="19:00:00", is_active=False,
+    )).status_code == 201
+    profile = client.get(doctor_url).json()
+    assert profile["consultation_fee"] == 2500
+    assert profile["weekly_sessions"] == [{"weekday": 0, "start_time": "09:00:00", "end_time": "10:00:00"}]
+    assert "phone" not in profile
+
+    doctor_headers, body = login(client, "doctor1", configured_password(test_settings.doctor_one_password))
+    own = client.patch("/api/doctors/me", headers=doctor_headers, json={"specialty": "General Practitioner"})
+    assert own.status_code == 200
+    assert own.json()["specialty"] == "General Practitioner"
+
+
+def test_demo_data_is_repeatable(client, test_settings):
+    from app.db.demo_data import DEMO_DOCTORS, seed_demo_data
+    from app.db.session import get_db
+    from app.models import Appointment, Patient
+
+    dependency = client.app.dependency_overrides[get_db]()
+    db = next(dependency)
+    try:
+        accounts = seed_demo_data(db, test_settings.timezone)
+        assert [username for username, _ in accounts] == [demo.username for demo in DEMO_DOCTORS]
+        counts = (db.query(Patient).count(), db.query(Appointment).count())
+        assert seed_demo_data(db, test_settings.timezone) == []
+        assert (db.query(Patient).count(), db.query(Appointment).count()) == counts
+    finally:
+        dependency.close()
+    doctors = client.get("/api/doctors").json()
+    assert len(doctors) == 2 + len(DEMO_DOCTORS)
+    assert all(doctor["specialty"] for doctor in doctors)
+    login(client, DEMO_DOCTORS[0].username, accounts[0][1])
