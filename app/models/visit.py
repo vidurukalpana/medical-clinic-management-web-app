@@ -42,3 +42,7 @@ class Visit(Base):
     @property
     def end_at(self) -> datetime | None:
         return self.appointment.end_at if self.appointment else None
+
+    @property
+    def appointment_number(self) -> int | None:
+        return self.appointment.appointment_number if self.appointment else None

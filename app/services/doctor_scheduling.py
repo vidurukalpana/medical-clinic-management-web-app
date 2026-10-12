@@ -79,7 +79,11 @@ def update_availability(
     ):
         raise AvailabilityOverlapError()
 
-    ensure_bookings_covered(db, availability, schedule, clinic_timezone)
+    bookings = ensure_bookings_covered(db, availability, schedule, clinic_timezone)
+    zone = ZoneInfo(clinic_timezone)
+    for booking in bookings:
+        # Keep booked sessions in step with a new end time.
+        booking.end_at = datetime.combine(booking.start_at.astimezone(zone).date(), schedule.end_time, zone)
     for field_name, value in schedule.model_dump().items():
         setattr(availability, field_name, value)
     db.commit()
@@ -239,27 +243,27 @@ def ensure_no_booking_conflict(
 def ensure_bookings_covered(
     db: Session, original: Availability, replacement: AvailabilityCreate | None,
     clinic_timezone: str,
-) -> None:
-    periods = list(db.scalars(select(Availability).where(
-        Availability.doctor_id == original.doctor_id,
-        Availability.id != original.id, Availability.is_active.is_(True),
-    )))
-    if replacement is not None and replacement.is_active:
-        periods.append(replacement)
-    bookings = db.scalars(select(Appointment).where(
-        Appointment.doctor_id == original.doctor_id,
-        Appointment.status == "scheduled",
-        Appointment.end_at > datetime.now(timezone.utc),
-    ))
+) -> list[Appointment]:
+    """Return the session's upcoming bookings, refusing changes that would strand them."""
+    if not original.is_active:
+        return []
     zone = ZoneInfo(clinic_timezone)
-    for booking in bookings:
-        start, end = booking.start_at.astimezone(zone), booking.end_at.astimezone(zone)
-        # Only protect bookings covered by the period being changed.
-        if not (original.is_active and start.weekday() == original.weekday
-                and start.date() == end.date()
-                and original.start_time <= start.time() and end.time() <= original.end_time):
-            continue
-        if not any(period.weekday == start.weekday()
-                   and period.start_time <= start.time() and end.time() <= period.end_time
-                   for period in periods):
-            raise ConflictError("Working hours conflict with an existing booking. Reschedule or cancel it first.")
+    bookings = [
+        booking for booking in db.scalars(select(Appointment).where(
+            Appointment.doctor_id == original.doctor_id,
+            Appointment.status == "scheduled",
+            Appointment.end_at > datetime.now(timezone.utc),
+        ))
+        # A booking belongs to the session that starts at its start time.
+        if booking.start_at.astimezone(zone).weekday() == original.weekday
+        and booking.start_at.astimezone(zone).time() == original.start_time
+    ]
+    if not bookings:
+        return []
+    if (replacement is None or not replacement.is_active
+            or replacement.weekday != original.weekday
+            or replacement.start_time != original.start_time):
+        raise ConflictError("This session has upcoming bookings. Reschedule or cancel them first.")
+    if max(booking.appointment_number for booking in bookings) > replacement.max_patients:
+        raise ConflictError("Upcoming bookings already hold numbers above this limit.")
+    return bookings

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { api, type Doctor, type PublicDoctor, type Slot } from "./api";
+import { api, type BookingSession, type Doctor, type PublicDoctor } from "./api";
 import { useAuth } from "./auth";
 import { addDays, clinicDate } from "./time";
 
@@ -27,12 +27,12 @@ export interface NextAvailable {
   doctor: PublicDoctor;
   doctorIndex: number;
   day: string;
-  slots: Slot[];
+  session: BookingSession;
 }
 
 /**
- * The earliest open slot across all bookable doctors, searching from today
- * up to `days` ahead. Resolves to null when everyone is fully booked.
+ * The earliest session with places left across all bookable doctors, searching
+ * from today up to `days` ahead. Resolves to null when everyone is fully booked.
  */
 export function useNextAvailable(doctors: PublicDoctor[] | undefined, days = 7) {
   return useQuery({
@@ -43,11 +43,12 @@ export function useNextAvailable(doctors: PublicDoctor[] | undefined, days = 7) 
       const today = clinicDate();
       for (let offset = 0; offset < days; offset++) {
         const day = addDays(today, offset);
-        const results = await Promise.all(doctors!.map((doctor) => api.availableSlots(doctor.id, day)));
+        const results = await Promise.all(doctors!.map((doctor) => api.sessions(doctor.id, day)));
         let best: NextAvailable | null = null;
-        for (const [doctorIndex, slots] of results.entries()) {
-          const startsSooner = !best || Date.parse(slots[0]?.start_at) < Date.parse(best.slots[0].start_at);
-          if (slots.length && startsSooner) best = { doctor: doctors![doctorIndex], doctorIndex, day, slots };
+        for (const [doctorIndex, sessions] of results.entries()) {
+          const session = sessions.find((item) => item.remaining > 0);
+          if (session && (!best || Date.parse(session.start_at) < Date.parse(best.session.start_at)))
+            best = { doctor: doctors![doctorIndex], doctorIndex, day, session };
         }
         if (best) return best;
       }

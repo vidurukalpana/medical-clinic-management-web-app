@@ -24,21 +24,21 @@
 
 ## Booking a visit
 - Patients book on the website using the "Book a visit" page.
-- Booking needs only a name and phone number, plus a doctor and an available time.
+- Booking needs only a name and phone number, plus a doctor and a date. If the doctor has two sessions that day, the patient also picks one.
 - An account is not required. Patients can optionally create an account to see their bookings on the "My bookings" page.
-- Each booking is a single consultation slot, usually 10 minutes long.
-- Please arrive 10 minutes before your booked time.
+- Each doctor sees a set number of patients per session. A booking gives the patient a number in that session, for example No. 7.
+- Patients are seen in number order. There is no fixed time for each patient, so please arrive a little before the session starts.
 - Patients can also phone reception to book.
 
 ## Managing a booking
 - After booking, the website shows a private booking code once. Keep it safe.
-- Use the booking number and the private code on the "Manage booking" page to view, reschedule or cancel a booking.
+- Use the booking ID and the private code on the "Manage booking" page to view, reschedule or cancel a booking.
 - Patients with an account can cancel or reschedule on the "My bookings" page.
 - A lost booking code cannot be recovered online. Contact the clinic reception for help.
 
 ## On the day
 - Check in at reception when you arrive. Reception adds you to the doctor's queue.
-- Walk-in patients can be seen if the doctor has free slots that day.
+- Walk-in patients get the next free number in the doctor's session that day, if places remain.
 - Bring any previous prescriptions, test reports and your NIC or passport.
 
 ## Privacy

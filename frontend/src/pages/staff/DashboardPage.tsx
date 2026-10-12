@@ -13,7 +13,7 @@ import {
   UserX,
   Coffee,
 } from "lucide-react";
-import { api, type Dashboard, type DashboardAction, type DoctorQueue } from "../../lib/api";
+import { api, type Dashboard, type DashboardAction, type DashboardVisit, type DoctorQueue } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { formatDay, formatTime, greeting } from "../../lib/time";
 import { Avatar, Button, Card, EmptyState, ErrorNote, Spinner, StatusBadge } from "../../components/ui";
@@ -90,6 +90,10 @@ function StatTile({ label, value, icon, tone, hint }: {
   );
 }
 
+/** The patient's booked number; legacy walk-ins without a booking keep their arrival number. */
+const queueLabel = (visit: DashboardVisit) =>
+  String(visit.appointment_number ?? visit.queue_number).padStart(2, "0");
+
 function QueueColumn({ queue, index }: { queue: DoctorQueue; index: number }) {
   const current = queue.patients.filter((visit) => visit.status === "in_progress");
   const waiting = queue.patients.filter((visit) => visit.status === "waiting");
@@ -112,10 +116,10 @@ function QueueColumn({ queue, index }: { queue: DoctorQueue; index: number }) {
             <span className="live-dot" /> Now serving
           </div>
           <div className="now-serving-main">
-            <span className="queue-token">{String(visit.queue_number).padStart(2, "0")}</span>
+            <span className="queue-token">{queueLabel(visit)}</span>
             <div>
               <strong>{visit.patient_name}</strong>
-              <span className="muted small">{visit.start_at ? `Slot ${formatTime(visit.start_at)}` : "Walk-in"}</span>
+              <span className="muted small">{visit.start_at ? `${formatTime(visit.start_at)} session` : "Walk-in"}</span>
             </div>
           </div>
           <ActionButtons actions={visit.actions} subject={visit.patient_name} />
@@ -131,11 +135,11 @@ function QueueColumn({ queue, index }: { queue: DoctorQueue; index: number }) {
         <ol className="queue-list">
           {waiting.map((visit, position) => (
             <li key={visit.id} className="queue-item" style={{ animationDelay: `${position * 40}ms` }}>
-              <span className="queue-num">{String(visit.queue_number).padStart(2, "0")}</span>
+              <span className="queue-num">{queueLabel(visit)}</span>
               <div className="queue-item-main">
                 <strong>{visit.patient_name}</strong>
                 <span className="muted small">
-                  {visit.start_at ? formatTime(visit.start_at) : "Walk-in"}
+                  {visit.start_at ? `${formatTime(visit.start_at)} session` : "Walk-in"}
                   {position === 0 && current.length === 0 ? " · next up" : ""}
                 </span>
               </div>
@@ -294,8 +298,8 @@ export function DashboardPage() {
                   {data.appointments.map((appointment) => (
                     <li key={appointment.id} className={`timeline-item status-${appointment.status}`}>
                       <span className="timeline-time">
-                        <strong>{formatTime(appointment.start_at)}</strong>
-                        <small>{formatTime(appointment.end_at)}</small>
+                        <strong>No. {appointment.appointment_number}</strong>
+                        <small>{formatTime(appointment.start_at)}</small>
                       </span>
                       <span className="timeline-rail" />
                       <div className="timeline-body">

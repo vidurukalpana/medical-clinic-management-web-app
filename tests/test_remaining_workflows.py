@@ -65,11 +65,9 @@ def test_no_show_rejects_cancelled_and_checked_in(client, booking):
 
 
 def test_appointment_filters_pagination_and_scope(client, booking, test_settings):
-    headers, payload, slots_url = booking
-    slots = client.get(slots_url).json()
-    for slot in slots[:2]:
-        assert client.post("/api/appointments", headers=headers,
-                           json={**payload, "start_at": slot["start_at"]}).status_code == 201
+    headers, payload, _ = booking
+    for _ in range(2):
+        assert client.post("/api/appointments", headers=headers, json=payload).status_code == 201
     day = payload["start_at"][:10]
     params = {"doctor_id": payload["doctor_id"], "patient_id": payload["patient_id"],
               "date_from": day, "date_to": day, "status": "scheduled", "limit": 1}

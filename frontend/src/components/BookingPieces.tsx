@@ -1,8 +1,8 @@
 import { useState, type ReactNode } from "react";
 import { CalendarClock, Clock, Stethoscope } from "lucide-react";
-import type { GuestBooking, Slot } from "../lib/api";
+import type { BookingSession, GuestBooking } from "../lib/api";
 import { formatDay, formatTime, clinicDate } from "../lib/time";
-import { SlotPicker } from "./SlotPicker";
+import { SessionPicker } from "./SessionPicker";
 import { Button, Modal, StatusBadge } from "./ui";
 
 export function BookingTicket({ booking, doctorName, actions }: {
@@ -26,9 +26,10 @@ export function BookingTicket({ booking, doctorName, actions }: {
         </div>
         <h4>
           <Stethoscope size={16} /> {doctorName ?? `Doctor #${booking.doctor_id}`}
+          <span className="ticket-number">No. {booking.appointment_number}</span>
         </h4>
         <p className="muted">
-          <Clock size={14} /> {formatDay(day)} · {formatTime(booking.start_at)} – {formatTime(booking.end_at)}
+          <Clock size={14} /> {formatDay(day)} · session starts {formatTime(booking.start_at)}
         </p>
         {actions && <div className="ticket-actions">{actions}</div>}
       </div>
@@ -40,42 +41,42 @@ export function RescheduleModal({ open, doctorId, onClose, onConfirm, busy }: {
   open: boolean;
   doctorId: number;
   onClose: () => void;
-  onConfirm: (slot: Slot) => void;
+  onConfirm: (session: BookingSession) => void;
   busy?: boolean;
 }) {
   const [day, setDay] = useState<string | null>(null);
-  const [slot, setSlot] = useState<Slot | null>(null);
+  const [session, setSession] = useState<BookingSession | null>(null);
   return (
     <Modal
       open={open}
       wide
-      title="Pick a new time"
+      title="Pick a new date"
       onClose={onClose}
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>
-            Keep current time
+            Keep current booking
           </Button>
           <Button
             icon={<CalendarClock size={16} />}
-            disabled={!slot}
+            disabled={!session}
             loading={busy}
-            onClick={() => slot && onConfirm(slot)}
+            onClick={() => session && onConfirm(session)}
           >
-            {slot ? `Move to ${formatTime(slot.start_at)}` : "Choose a time"}
+            {session ? `Move to ${formatDay(clinicDate(new Date(session.start_at)), "short")}` : "Choose a date"}
           </Button>
         </>
       }
     >
-      <SlotPicker
+      <SessionPicker
         doctorId={doctorId}
         day={day}
         onDayChange={(next) => {
           setDay(next);
-          setSlot(null);
+          setSession(null);
         }}
-        value={slot?.start_at ?? null}
-        onChange={setSlot}
+        value={session?.start_at ?? null}
+        onChange={setSession}
       />
     </Modal>
   );

@@ -26,7 +26,7 @@ export function MyBookingsPage() {
 
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ["my-appointments"] });
-    queryClient.invalidateQueries({ queryKey: ["slots"] });
+    queryClient.invalidateQueries({ queryKey: ["sessions"] });
   };
   const cancel = useMutation({
     mutationFn: (id: number) => api.myCancel(id),
@@ -38,10 +38,10 @@ export function MyBookingsPage() {
   });
   const reschedule = useMutation({
     mutationFn: ({ id, startAt }: { id: number; startAt: string }) => api.myReschedule(id, startAt),
-    onSuccess: () => {
+    onSuccess: (result) => {
       setMoving(null);
       refresh();
-      toast("Booking moved");
+      toast(`Booking moved. Your new number is ${result.appointment_number}.`);
     },
     onError: (error) => toast((error as Error).message, "error"),
   });
@@ -145,7 +145,7 @@ export function MyBookingsPage() {
           doctorId={moving.doctor_id}
           onClose={() => setMoving(null)}
           busy={reschedule.isPending}
-          onConfirm={(slot) => reschedule.mutate({ id: moving.id, startAt: slot.start_at })}
+          onConfirm={(session) => reschedule.mutate({ id: moving.id, startAt: session.start_at })}
         />
       )}
     </div>

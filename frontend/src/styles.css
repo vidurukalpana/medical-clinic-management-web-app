@@ -1062,24 +1062,6 @@ textarea.input {
 .fc-empty svg {
   color: var(--primary);
 }
-.fc-slots {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-}
-.fc-slots span {
-  text-align: center;
-  padding: 8px 0;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  font-weight: 650;
-  font-size: 0.85rem;
-}
-.fc-slots span.on {
-  background: var(--primary);
-  border-color: var(--primary);
-  color: #fff;
-}
 .float-card-queue {
   bottom: 10px;
   left: -2%;
@@ -1477,8 +1459,8 @@ textarea.input {
   color: var(--text-3);
 }
 
-/* Slot picker */
-.slot-picker {
+/* Session picker */
+.session-picker {
   display: flex;
   flex-direction: column;
   gap: 20px;
@@ -1564,45 +1546,71 @@ textarea.input {
   background: rgba(255, 255, 255, 0.2);
   color: #fff;
 }
-.slot-groups {
+.session-list {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 10px;
 }
-.slot-group-title {
+.session-option {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-weight: 700;
-  font-size: 0.88rem;
-  margin-bottom: 10px;
-  color: var(--text-2);
-}
-.slot-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
-  gap: 8px;
-}
-.slot {
-  padding: 10px 0;
-  border-radius: 12px;
+  gap: 14px;
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 14px;
   border: 1.5px solid var(--border);
   background: var(--surface);
   color: var(--text);
-  font-weight: 650;
-  font-size: 0.9rem;
+  text-align: left;
   transition: all 0.12s;
 }
-.slot:hover {
-  border-color: var(--teal-bright);
-  color: var(--primary);
+.session-option > svg {
+  color: var(--text-3);
+  flex-shrink: 0;
 }
-.slot.is-selected {
+.session-option:hover:not(:disabled) {
+  border-color: var(--teal-bright);
+}
+.session-option:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.session-option-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+.session-option-text small {
+  color: var(--text-3);
+  font-size: 0.8rem;
+}
+.session-option-meta {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--green);
+  background: var(--green-50);
+  padding: 2px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.session-option:disabled .session-option-meta {
+  color: var(--text-3);
+  background: var(--slate-50);
+}
+.session-option.is-selected {
   background: var(--primary);
   border-color: var(--primary);
   color: #fff;
-  transform: scale(1.03);
   box-shadow: 0 8px 18px -10px var(--primary);
+}
+.session-option.is-selected > svg,
+.session-option.is-selected .session-option-text small {
+  color: rgba(255, 255, 255, 0.8);
+}
+.session-option.is-selected .session-option-meta {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
 }
 
 /* Confirmation */
@@ -1634,7 +1642,7 @@ textarea.input {
 }
 .confirm-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   gap: 12px;
   width: 100%;
 }
@@ -1651,6 +1659,12 @@ textarea.input {
 }
 .confirm-stat strong {
   font-size: 1.3rem;
+}
+.confirm-stat-number {
+  background: var(--primary-50);
+}
+.confirm-stat-number strong {
+  color: var(--primary);
 }
 .token-box {
   width: 100%;
@@ -1812,6 +1826,15 @@ textarea.input {
   flex-direction: column;
   gap: 6px;
   min-width: 0;
+}
+.ticket-number {
+  margin-left: auto;
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: var(--primary);
+  background: var(--primary-50);
+  padding: 2px 9px;
+  border-radius: 999px;
 }
 .ticket-row {
   display: flex;

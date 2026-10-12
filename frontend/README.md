@@ -48,7 +48,7 @@ Use the accounts seeded by the backend (`admin`, `doctor1`, `doctor2`) with the 
 ```
 src/
   lib/          API client + types (api.ts), auth context, clinic-timezone helpers, hooks
-  components/   UI primitives, layouts, site footer, chat widget, slot picker, patient picker, toasts
+  components/   UI primitives, layouts, site footer, chat widget, session picker, patient picker, toasts
   pages/public/ Home, booking wizard, manage booking, sign-in/registration, My bookings
   pages/staff/  Dashboard, appointments, patients, schedule, admin pages, account
 ```
