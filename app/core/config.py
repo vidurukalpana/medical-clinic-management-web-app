@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -31,6 +32,15 @@ class Settings(BaseSettings):
     chatbot_base_url: str = "http://127.0.0.1:11434"
     chatbot_model: str = "llama3.2:1b"
     chatbot_timeout_seconds: float = Field(default=60, gt=0, le=300)
+
+    # "outbox" records messages without sending them; add a provider here to send for real.
+    sms_provider: Literal["outbox"] = "outbox"
+    # Runs in the API process: queues due reminders and hands queued messages to the provider.
+    sms_worker_enabled: bool = True
+    sms_worker_interval_seconds: int = Field(default=60, ge=5, le=3600)
+    # Reminder at this hour on the day, or this many hours before the session, whichever is later.
+    sms_reminder_hour: int = Field(default=7, ge=0, le=23)
+    sms_reminder_hours_before: int = Field(default=3, ge=0, le=24)
 
     @field_validator("database_url")
     @classmethod

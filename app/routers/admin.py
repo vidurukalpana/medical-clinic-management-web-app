@@ -1,9 +1,12 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Query, Response, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy import func, select
 
+from app.core.config import Settings, get_settings
 from app.dependencies import AdministratorUser, DatabaseSession
+from app.schemas.sms import SmsMessageRead, SmsOutboxPage
+from app.services.sms import outbox_page
 from app.models import Doctor, User, UserRole
 from app.schemas.auth import AuthenticatedUserRead, PasswordResetRequest
 from app.schemas.doctor import DoctorRead
@@ -69,3 +72,18 @@ def read_user(user_id: int, _: AdministratorUser, db: DatabaseSession) -> User:
 @router.patch("/users/{user_id}", response_model=AuthenticatedUserRead)
 def edit_user(user_id: int, data: UserUpdate, _: AdministratorUser, db: DatabaseSession) -> User:
     return update_user(db, user_id, data)
+
+
+@router.get("/sms", response_model=SmsOutboxPage, summary="Text messages to patients, newest first")
+def read_sms_outbox(
+    _: AdministratorUser,
+    db: DatabaseSession,
+    response: Response,
+    settings: Annotated[Settings, Depends(get_settings)],
+    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+) -> SmsOutboxPage:
+    response.headers["Cache-Control"] = "no-store"
+    rows, total = outbox_page(db, offset, limit)
+    return SmsOutboxPage(items=[SmsMessageRead.model_validate(row) for row in rows], total=total,
+                         offset=offset, limit=limit, provider=settings.sms_provider)
