@@ -47,9 +47,12 @@ export interface SessionTime {
 export interface BookingSession extends SessionTime {
   max_patients: number;
   remaining: number;
+  /** Places online booking may still take; the rest are kept for walk-ins and reception. */
+  remaining_online: number;
 }
 export interface BookingStatus {
   remaining_places: number;
+  remaining_online_places: number;
   is_fully_booked: boolean;
 }
 export interface Appointment extends SessionTime {
@@ -147,6 +150,7 @@ export interface Availability {
   start_time: string;
   end_time: string;
   max_patients: number;
+  reserved_places: number;
   is_active: boolean;
 }
 export type AvailabilityInput = Omit<Availability, "id" | "doctor_id">;

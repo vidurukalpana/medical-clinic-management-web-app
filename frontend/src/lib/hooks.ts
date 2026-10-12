@@ -46,7 +46,7 @@ export function useNextAvailable(doctors: PublicDoctor[] | undefined, days = 7) 
         const results = await Promise.all(doctors!.map((doctor) => api.sessions(doctor.id, day)));
         let best: NextAvailable | null = null;
         for (const [doctorIndex, sessions] of results.entries()) {
-          const session = sessions.find((item) => item.remaining > 0);
+          const session = sessions.find((item) => item.remaining_online > 0);
           if (session && (!best || Date.parse(session.start_at) < Date.parse(best.session.start_at)))
             best = { doctor: doctors![doctorIndex], doctorIndex, day, session };
         }

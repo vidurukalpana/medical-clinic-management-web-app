@@ -174,8 +174,8 @@ function HeroVisual({ doctors }: { doctors: PublicDoctor[] | undefined }) {
       {found && (
         <div className="float-card float-card-queue">
           <small>{dayLabel(found.day)}</small>
-          <strong className="queue-num">{String(found.session.remaining).padStart(2, "0")}</strong>
-          <span className="muted">{found.session.remaining === 1 ? "place left" : "places left"}</span>
+          <strong className="queue-num">{String(found.session.remaining_online).padStart(2, "0")}</strong>
+          <span className="muted">{found.session.remaining_online === 1 ? "place left" : "places left"}</span>
         </div>
       )}
       <div className="float-card float-card-mini">

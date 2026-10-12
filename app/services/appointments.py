@@ -43,7 +43,9 @@ def booking_sessions(
         DoctorUnavailability.start_at < day_end,
         DoctorUnavailability.end_at > day_start,
     )))
-    bookings = select(Appointment.start_at, func.count()).where(
+    # Only online bookings carry a private-code hash.
+    online = func.count().filter(Appointment.guest_token_hash.is_not(None))
+    bookings = select(Appointment.start_at, func.count(), online).where(
         Appointment.doctor_id == doctor.id,
         Appointment.status != "cancelled",
         Appointment.start_at >= day_start,
@@ -51,7 +53,7 @@ def booking_sessions(
     ).group_by(Appointment.start_at)
     if exclude_id is not None:
         bookings = bookings.where(Appointment.id != exclude_id)
-    booked = {start: total for start, total in db.execute(bookings)}
+    booked = {start: (total, online_total) for start, total, online_total in db.execute(bookings)}
     # Older walk-ins have no reservation; conservatively retain their capacity.
     unreserved_visits = db.scalar(select(func.count()).select_from(Visit).where(
         Visit.doctor_id == doctor.id,
@@ -68,19 +70,22 @@ def booking_sessions(
         if end <= now or any(start < blocked_end and end > blocked_start
                              for blocked_start, blocked_end in blocked):
             continue
-        remaining = max(schedule.max_patients - booked.get(start, 0), 0)
+        total, online_total = booked.get(start, (0, 0))
+        remaining = max(schedule.max_patients - total, 0)
         held = min(remaining, unreserved_visits)
         unreserved_visits -= held
+        remaining -= held
+        online_cap = schedule.max_patients - schedule.reserved_places
         sessions.append(BookingSession(
-            start_at=start, end_at=end,
-            max_patients=schedule.max_patients, remaining=remaining - held,
+            start_at=start, end_at=end, max_patients=schedule.max_patients, remaining=remaining,
+            remaining_online=max(min(online_cap - online_total, remaining), 0),
         ))
     return sessions
 
 
 def select_session(
     db: Session, doctor: Doctor, start_at: datetime, clinic_timezone: str,
-    exclude_id: int | None = None,
+    exclude_id: int | None = None, *, online: bool = False,
 ) -> BookingSession:
     zone = ZoneInfo(clinic_timezone)
     day = start_at.astimezone(zone).date()
@@ -90,6 +95,10 @@ def select_session(
         if session.start_at == start_at:
             if not session.remaining:
                 raise ConflictError("This session is fully booked.")
+            if online and not session.remaining_online:
+                raise ConflictError(
+                    "Online booking for this session is full. Reception may still have places.",
+                )
             return session
     raise ConflictError("The selected session is not available.")
 
@@ -111,9 +120,10 @@ def next_appointment_number(
 
 def create_appointment(
     db: Session, doctor: Doctor, data: AppointmentCreate, clinic_timezone: str,
+    *, online: bool = False,
 ) -> Appointment:
     get_patient(db, data.patient_id)
-    session = select_session(db, doctor, data.start_at, clinic_timezone)
+    session = select_session(db, doctor, data.start_at, clinic_timezone, online=online)
     appointment = Appointment(
         doctor_id=doctor.id, patient_id=data.patient_id,
         start_at=session.start_at, end_at=session.end_at,
@@ -133,7 +143,7 @@ def get_appointment(db: Session, appointment_id: int) -> Appointment:
 
 def reschedule_appointment(
     db: Session, doctor: Doctor, appointment: Appointment,
-    start_at: datetime, clinic_timezone: str,
+    start_at: datetime, clinic_timezone: str, *, online: bool = False,
 ) -> Appointment:
     ensure_not_checked_in(db, appointment)
     if appointment.status != "scheduled":
@@ -143,7 +153,7 @@ def reschedule_appointment(
     if start_at == appointment.start_at:
         # Already in this session; keep the patient's number.
         return appointment
-    session = select_session(db, doctor, start_at, clinic_timezone, appointment.id)
+    session = select_session(db, doctor, start_at, clinic_timezone, appointment.id, online=online)
     appointment.start_at = session.start_at
     appointment.end_at = session.end_at
     appointment.appointment_number = next_appointment_number(

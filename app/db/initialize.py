@@ -95,6 +95,17 @@ def _upgrade_session_capacity(connection: Connection) -> None:
     ))
 
 
+def _upgrade_reserved_places(connection: Connection) -> None:
+    """Add the per-session count of places kept for walk-ins and reception."""
+    if _has_column(connection, "availability", "reserved_places"):
+        return
+    connection.execute(text("ALTER TABLE availability ADD COLUMN reserved_places INTEGER NOT NULL DEFAULT 0"))
+    connection.execute(text(
+        "ALTER TABLE availability ADD CONSTRAINT ck_availability_reserved_places "
+        "CHECK (reserved_places BETWEEN 0 AND max_patients)"
+    ))
+
+
 def _upgrade_appointment_numbers(connection: Connection, timezone: str) -> None:
     """Move upcoming slot bookings into their session and number them in their old time order."""
     if _has_column(connection, "appointments", "appointment_number"):
@@ -151,6 +162,7 @@ def upgrade_booking_schema(
         connection.execute(text("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS booked_by_user_id INTEGER REFERENCES users(id)"))
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_appointments_booked_by_user_id ON appointments (booked_by_user_id)"))
         _upgrade_session_capacity(connection)
+        _upgrade_reserved_places(connection)
         _upgrade_appointment_numbers(connection, timezone)
         if purge_clinical_data:
             connection.execute(text("ALTER TABLE appointments DROP COLUMN IF EXISTS reason"))

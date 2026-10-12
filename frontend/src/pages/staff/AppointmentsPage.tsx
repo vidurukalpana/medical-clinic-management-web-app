@@ -191,6 +191,7 @@ export function AppointmentsPage() {
 
       {moving && (
         <RescheduleModal
+          staff
           open
           doctorId={moving.doctor_id}
           onClose={() => setMoving(null)}

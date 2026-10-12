@@ -32,6 +32,10 @@ class Availability(Base):
             "max_patients BETWEEN 1 AND 200",
             name="ck_availability_max_patients",
         ),
+        CheckConstraint(
+            "reserved_places BETWEEN 0 AND max_patients",
+            name="ck_availability_reserved_places",
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -43,6 +47,8 @@ class Availability(Base):
     end_time: Mapped[time] = mapped_column(Time)
     # Patients are seen in number order, so a session has a limit rather than fixed times.
     max_patients: Mapped[int] = mapped_column(Integer, default=20, server_default="20")
+    # Places online booking cannot take, kept for walk-ins and reception bookings.
+    reserved_places: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     doctor: Mapped[Doctor] = relationship(back_populates="availability")

@@ -43,12 +43,13 @@ export function BookingTicket({ booking, doctorName, actions }: {
   );
 }
 
-export function RescheduleModal({ open, doctorId, onClose, onConfirm, busy }: {
+export function RescheduleModal({ open, doctorId, onClose, onConfirm, busy, staff = false }: {
   open: boolean;
   doctorId: number;
   onClose: () => void;
   onConfirm: (session: BookingSession) => void;
   busy?: boolean;
+  staff?: boolean;
 }) {
   const [day, setDay] = useState<string | null>(null);
   const [session, setSession] = useState<BookingSession | null>(null);
@@ -83,6 +84,7 @@ export function RescheduleModal({ open, doctorId, onClose, onConfirm, busy }: {
         }}
         value={session?.start_at ?? null}
         onChange={setSession}
+        staff={staff}
       />
     </Modal>
   );

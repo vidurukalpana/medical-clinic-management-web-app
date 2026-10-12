@@ -38,6 +38,7 @@
 
 ## On the day
 - Check in at reception when you arrive. Reception adds you to the doctor's queue.
+- Some places in each session are kept for walk-ins and phone bookings, so a session that is full online may still have places at reception.
 - Walk-in patients get the next free number in the doctor's session that day, if places remain.
 - Bring any previous prescriptions, test reports and your NIC or passport.
 
