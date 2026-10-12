@@ -990,9 +990,11 @@ textarea.input {
   gap: 12px;
   flex-wrap: wrap;
 }
+/* The small cards hang off the main card's bottom edge, whatever its height. */
 .hero-visual {
+  --hang: 96px;
   position: relative;
-  min-height: 420px;
+  padding-bottom: var(--hang);
 }
 .float-card {
   position: absolute;
@@ -1003,9 +1005,9 @@ textarea.input {
   padding: 20px;
 }
 .float-card-main {
-  top: 20px;
-  left: 6%;
-  right: 6%;
+  position: relative;
+  margin: 0 6%;
+  padding-bottom: 40px;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -1063,8 +1065,8 @@ textarea.input {
   color: var(--primary);
 }
 .float-card-queue {
-  bottom: 10px;
-  left: -2%;
+  top: calc(100% - var(--hang) - 32px);
+  left: 0;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -1087,8 +1089,8 @@ textarea.input {
   letter-spacing: -0.04em;
 }
 .float-card-mini {
-  bottom: 40px;
-  right: -2%;
+  top: calc(100% - var(--hang) - 22px);
+  right: 0;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -2956,7 +2958,6 @@ td .action-row {
     grid-template-columns: minmax(0, 1fr);
   }
   .hero-visual {
-    min-height: 380px;
     max-width: 480px;
     width: 100%;
     margin: 0 auto;
@@ -3072,12 +3073,8 @@ td .action-row {
   .hero {
     padding: 40px 0 56px;
   }
-  .hero-visual {
-    min-height: 340px;
-  }
   .float-card-main {
-    left: 0;
-    right: 0;
+    margin: 0;
   }
   .float-card-mini {
     display: none;
