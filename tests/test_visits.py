@@ -29,7 +29,7 @@ def opd(client, test_settings, monkeypatch):
                 db.add(Availability(
                     doctor_id=doctor["id"], weekday=weekday,
                     start_time=time(9), end_time=time(11),
-                    slot_duration_minutes=15, is_active=True,
+                    max_patients=8, is_active=True,
                 ))
         db.commit()
     finally:
@@ -49,10 +49,12 @@ def make_appointment(client, doctor_id, patient_id, days=0, status="scheduled"):
     dependency = client.app.dependency_overrides[get_db]()
     db = next(dependency)
     try:
-        start = visits.datetime.now(timezone.utc) + timedelta(days=days)
+        # Today's 09:00-11:00 session, shifted by `days`.
+        start = visits.datetime.now(timezone.utc) + timedelta(days=days, hours=1)
         appointment = Appointment(
             doctor_id=doctor_id, patient_id=patient_id,
-            start_at=start, end_at=start + timedelta(minutes=15), status=status,
+            start_at=start, end_at=start + timedelta(hours=2), status=status,
+            appointment_number=appointments.next_appointment_number(db, doctor_id, start),
         )
         db.add(appointment)
         db.commit()
@@ -109,9 +111,12 @@ def test_queue_numbers_walk_ins_cancellation_and_daily_reset(client, opd, monkey
     assert client.patch(f"/api/visits/{second.json()['id']}", headers=headers,
                         json={"status": "cancelled"}).status_code == 200
     assert client.get(f"/api/appointments/{appointment_id}", headers=headers).json()["status"] == "cancelled"
-    assert walk_in(client, headers, doctor_id, patients[1]).json()["queue_number"] == 3
+    third = walk_in(client, headers, doctor_id, patients[1]).json()
+    assert third["queue_number"] == 3
+    # The cancelled number 2 is given out again.
+    assert third["appointment_number"] == 2
     queue = client.get(f"/api/doctors/{doctor_id}/queue", headers=headers).json()
-    assert [v["queue_number"] for v in queue] == [2, 1, 3]
+    assert [(v["appointment_number"], v["queue_number"]) for v in queue] == [(1, 1), (2, 2), (2, 3)]
     assert walk_in(client, headers, doctors[1]["id"], patients[2]).json()["queue_number"] == 1
     tomorrow = visits.clinic_today(test_settings.timezone) + timedelta(days=1)
     monkeypatch.setattr(visits, "clinic_today", lambda _: tomorrow)
@@ -174,7 +179,7 @@ def test_visit_permissions(client, opd, test_settings):
                         json={"status": "in_progress"}).status_code == 200
 
 
-def limit_slots(client, doctor_id, minutes=30):
+def limit_places(client, doctor_id, places):
     from sqlalchemy import select
     dependency = client.app.dependency_overrides[get_db]()
     db = next(dependency)
@@ -182,28 +187,29 @@ def limit_slots(client, doctor_id, minutes=30):
         schedule = db.scalar(select(Availability).where(
             Availability.doctor_id == doctor_id, Availability.weekday == 0,
         ))
-        schedule.end_time = (datetime(2030, 1, 7, 9) + timedelta(minutes=minutes)).time()
+        schedule.max_patients = places
         db.commit()
     finally:
         dependency.close()
 
 
-def test_walk_in_uses_capacity_and_cancellation_releases_slot(client, opd):
+def test_walk_in_uses_capacity_and_cancellation_releases_place(client, opd):
     headers, doctors, patients = opd
     doctor_id = doctors[0]["id"]
-    limit_slots(client, doctor_id)
+    limit_places(client, doctor_id, 2)
     base = f"/api/doctors/{doctor_id}"
-    slots = client.get(base + "/available-slots?day=2030-01-07", headers=headers).json()
+    sessions = client.get(base + "/sessions?day=2030-01-07", headers=headers).json()
     booked = client.post("/api/appointments", headers=headers, json={
-        "doctor_id": doctor_id, "patient_id": patients[0], "start_at": slots[0]["start_at"],
+        "doctor_id": doctor_id, "patient_id": patients[0], "start_at": sessions[0]["start_at"],
     })
     assert booked.status_code == 201
     walk = walk_in(client, headers, doctor_id, patients[1])
     assert walk.status_code == 201
+    assert walk.json()["appointment_number"] == 2
     reservation = client.get(f"/api/appointments/{walk.json()['appointment_id']}", headers=headers).json()
-    assert datetime.fromisoformat(reservation["start_at"]) == datetime.fromisoformat(slots[1]["start_at"])
+    assert datetime.fromisoformat(reservation["start_at"]) == datetime.fromisoformat(sessions[0]["start_at"])
     assert client.get(base + "/booking-status?day=2030-01-07", headers=headers).json() == {
-        "remaining_slots": 0, "is_fully_booked": True,
+        "remaining_places": 0, "is_fully_booked": True,
     }
     rejected = walk_in(client, headers, doctor_id, patients[2])
     assert rejected.status_code == 409
@@ -212,14 +218,39 @@ def test_walk_in_uses_capacity_and_cancellation_releases_slot(client, opd):
                        headers=headers, json={}).status_code == 201
     assert client.patch(f"/api/visits/{walk.json()['id']}", headers=headers,
                         json={"status": "cancelled"}).status_code == 200
-    assert client.get(base + "/booking-status?day=2030-01-07", headers=headers).json()["remaining_slots"] == 1
+    assert client.get(base + "/booking-status?day=2030-01-07", headers=headers).json()["remaining_places"] == 1
     assert walk_in(client, headers, doctor_id, patients[2]).status_code == 201
+
+
+def test_walk_in_joins_the_next_session_once_one_ends(client, opd, monkeypatch, test_settings):
+    from app.models import Availability as Session
+    headers, doctors, patients = opd
+    doctor_id = doctors[0]["id"]
+    dependency = client.app.dependency_overrides[get_db]()
+    db = next(dependency)
+    try:
+        db.add(Session(doctor_id=doctor_id, weekday=0, start_time=time(17), end_time=time(19),
+                       max_patients=5, is_active=True))
+        db.commit()
+    finally:
+        dependency.close()
+    class Noon(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2030, 1, 7, 12, tzinfo=ZoneInfo(test_settings.timezone)).astimezone(tz)
+    monkeypatch.setattr(appointments, "datetime", Noon)
+    evening = datetime(2030, 1, 7, 17, tzinfo=ZoneInfo(test_settings.timezone))
+    sessions = client.get(f"/api/doctors/{doctor_id}/sessions?day=2030-01-07", headers=headers).json()
+    assert [datetime.fromisoformat(s["start_at"]) for s in sessions] == [evening]
+    visit = walk_in(client, headers, doctor_id, patients[0]).json()
+    assert visit["appointment_number"] == 1
+    assert datetime.fromisoformat(visit["start_at"]) == evening
 
 
 def test_concurrent_walk_in_and_booking_compete_for_last_slot(client, opd):
     headers, doctors, patients = opd
     doctor_id = doctors[0]["id"]
-    limit_slots(client, doctor_id, 15)
+    limit_places(client, doctor_id, 1)
     def submit(kind):
         if kind == "walk":
             return walk_in(client, headers, doctor_id, patients[0]).status_code
@@ -250,7 +281,7 @@ def test_walk_in_rejected_without_working_time(client, opd):
     assert client.get(f"/api/doctors/{doctor_id}/queue", headers=headers).json() == []
 
 
-def test_twenty_booked_slots_reject_walk_ins_before_check_in(client, opd):
+def test_twenty_booked_places_reject_walk_ins_before_check_in(client, opd):
     from sqlalchemy import select
     headers, doctors, patients = opd
     doctor_id = doctors[0]["id"]
@@ -260,25 +291,23 @@ def test_twenty_booked_slots_reject_walk_ins_before_check_in(client, opd):
         schedule = db.scalar(select(Availability).where(
             Availability.doctor_id == doctor_id, Availability.weekday == 0,
         ))
-        schedule.slot_duration_minutes = 10
-        schedule.end_time = time(12, 20)
+        schedule.max_patients = 20
         db.commit()
     finally:
         dependency.close()
     base = f"/api/doctors/{doctor_id}"
-    slots = client.get(base + "/available-slots?day=2030-01-07", headers=headers).json()
-    assert len(slots) == 20
     appointment_ids = []
-    for slot in slots:
+    for number in range(1, 21):
         response = client.post("/api/appointments", headers=headers, json={
             "doctor_id": doctor_id, "patient_id": patients[0],
-            "start_at": slot["start_at"],
+            "start_at": "2030-01-07T09:00:00+05:30",
         })
         assert response.status_code == 201
+        assert response.json()["appointment_number"] == number
         appointment_ids.append(response.json()["id"])
     assert client.get(base + "/queue", headers=headers).json() == []
     assert client.get(base + "/booking-status?day=2030-01-07", headers=headers).json() == {
-        "remaining_slots": 0, "is_fully_booked": True,
+        "remaining_places": 0, "is_fully_booked": True,
     }
     assert walk_in(client, headers, doctor_id, patients[1]).status_code == 409
     assert client.get(base + "/queue", headers=headers).json() == []
@@ -286,7 +315,7 @@ def test_twenty_booked_slots_reject_walk_ins_before_check_in(client, opd):
                        headers=headers, json={}).status_code == 201
 
 
-def test_queue_uses_reserved_time_not_arrival_order(client, opd):
+def test_queue_follows_appointment_numbers_not_arrival_order(client, opd):
     headers, doctors, patients = opd
     doctor_id = doctors[0]["id"]
     booked = client.post("/api/appointments", headers=headers, json={
@@ -299,7 +328,7 @@ def test_queue_uses_reserved_time_not_arrival_order(client, opd):
     queue = client.get(f"/api/doctors/{doctor_id}/queue", headers=headers).json()
     assert [v["id"] for v in queue] == [checked_in["id"], walk["id"]]
     assert [v["queue_number"] for v in queue] == [2, 1]
-    assert datetime.fromisoformat(queue[0]["start_at"]) < datetime.fromisoformat(queue[1]["start_at"])
+    assert [v["appointment_number"] for v in queue] == [1, 2]
     assert queue[0]["end_at"] is not None
 
 
@@ -321,7 +350,7 @@ def test_dashboard_daily_counts_queues_and_quick_actions(client, opd):
     doctor_id = doctors[0]["id"]
     booked = client.post("/api/appointments", headers=headers, json={
         "doctor_id": doctor_id, "patient_id": patients[0],
-        "start_at": "2030-01-07T09:30:00+05:30",
+        "start_at": "2030-01-07T09:00:00+05:30",
     }).json()
     walked = walk_in(client, headers, doctor_id, patients[1]).json()
     response = client.get("/api/dashboard", headers=headers)
@@ -344,7 +373,9 @@ def test_dashboard_daily_counts_queues_and_quick_actions(client, opd):
                           json=check_in["body"]).status_code == 201
     dashboard = client.get("/api/dashboard", headers=headers).json()
     queue = next(q for q in dashboard["doctor_queues"] if q["doctor_id"] == doctor_id)
-    assert [v["patient_name"] for v in queue["patients"]] == ["Second Patient", "First Patient"]
+    assert [(v["appointment_number"], v["patient_name"]) for v in queue["patients"]] == [
+        (1, "First Patient"), (2, "Second Patient"),
+    ]
     assert dashboard["summary"]["waiting"] == 2
     assert all(not a["actions"] for a in dashboard["appointments"])
     start = queue["patients"][0]["actions"][0]
@@ -401,7 +432,8 @@ def test_dashboard_uses_clinic_midnight_and_excludes_terminal_visits(client, opd
                               ("2030-01-07T18:30:00+00:00", "scheduled")):
             start = datetime.fromisoformat(value)
             db.add(Appointment(doctor_id=doctors[0]["id"], patient_id=patients[0],
-                               start_at=start, end_at=start + timedelta(minutes=1), status=status))
+                               start_at=start, end_at=start + timedelta(minutes=1),
+                               appointment_number=1, status=status))
         db.commit()
     finally:
         dependency.close()

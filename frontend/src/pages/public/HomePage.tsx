@@ -1,9 +1,9 @@
 import { Link } from "react-router-dom";
 import {
+  CalendarDays,
   CalendarPlus,
   CalendarX,
   ShieldCheck,
-  Timer,
   ArrowRight,
   KeyRound,
   Stethoscope,
@@ -16,7 +16,7 @@ import { Avatar, EmptyState, ErrorNote, Spinner } from "../../components/ui";
 
 const STEPS = [
   { icon: Stethoscope, title: "Choose a doctor", text: "See who's in this week." },
-  { icon: Timer, title: "Pick a time", text: "Whatever suits your day." },
+  { icon: CalendarDays, title: "Pick a day", text: "You'll get your number right away." },
   { icon: KeyRound, title: "Keep your code", text: "Change or cancel anytime." },
 ];
 
@@ -127,7 +127,7 @@ function dayLabel(day: string) {
   return formatDay(day, "short");
 }
 
-/** Live preview of the soonest open appointment; never shows patient data. */
+/** Live preview of the soonest session with places left; never shows patient data. */
 function HeroVisual({ doctors }: { doctors: PublicDoctor[] | undefined }) {
   const next = useNextAvailable(doctors);
   const found = next.data;
@@ -154,26 +154,19 @@ function HeroVisual({ doctors }: { doctors: PublicDoctor[] | undefined }) {
                 <strong>{dayLabel(found.day)}</strong>
               </div>
               <div>
-                <small>Time</small>
-                <strong>{formatTime(found.slots[0].start_at)}</strong>
+                <small>Starts</small>
+                <strong>{formatTime(found.session.start_at)}</strong>
               </div>
-            </div>
-            <div className="fc-slots">
-              {found.slots.slice(0, 6).map((slot, index) => (
-                <span key={slot.start_at} className={index === 0 ? "on" : ""}>
-                  {formatTime(slot.start_at).replace(/\s?[AP]M$/, "")}
-                </span>
-              ))}
             </div>
           </>
         ) : next.isPending || !doctors ? (
           <div className="fc-empty">
-            <Spinner label="Finding the next open time…" />
+            <Spinner label="Finding the next open session…" />
           </div>
         ) : (
           <div className="fc-empty">
             <CalendarX size={28} />
-            <strong>{next.isError ? "See open times on the booking page" : "Fully booked this week"}</strong>
+            <strong>{next.isError ? "See open sessions on the booking page" : "Fully booked this week"}</strong>
             {!next.isError && <span className="muted">Please check back soon.</span>}
           </div>
         )}
@@ -181,8 +174,8 @@ function HeroVisual({ doctors }: { doctors: PublicDoctor[] | undefined }) {
       {found && (
         <div className="float-card float-card-queue">
           <small>{dayLabel(found.day)}</small>
-          <strong className="queue-num">{String(found.slots.length).padStart(2, "0")}</strong>
-          <span className="muted">{found.slots.length === 1 ? "slot left" : "slots left"}</span>
+          <strong className="queue-num">{String(found.session.remaining).padStart(2, "0")}</strong>
+          <span className="muted">{found.session.remaining === 1 ? "place left" : "places left"}</span>
         </div>
       )}
       <div className="float-card float-card-mini">

@@ -4,8 +4,8 @@ A FastAPI backend for public appointment booking and staff-managed clinic queues
 
 ## Scope and privacy
 
-- Public doctor profiles, available appointment slots and remaining capacity.
-- Guest booking with name and phone number only, alongside doctor and selected time.
+- Public doctor profiles, each day's consulting sessions and the places left in them.
+- Guest booking with name and phone number only, alongside doctor and selected session.
 - Private booking management using a random token; only its SHA-256 hash is stored.
 - Optional patient registration and login; patient accounts never grant staff access.
 - Staff login for patient registration, schedules, check-in, walk-ins and queue management.
@@ -158,7 +158,7 @@ Logged-in users can change their password with `PUT /api/auth/password`. They mu
 
 ## Staff doctor scheduling
 
-Availability records define a doctor's weekday, working period and appointment-slot duration. The default is 10 minutes per patient (12 slots in two hours, or 18 in three hours). A different duration can still be specified explicitly when managing a schedule. Weekdays use `0` for Monday through `4` for Friday. Unavailability records use `start_at` and `end_at`, so they can block part of a day, a full day or several days.
+Availability records define a doctor's weekly consulting sessions: weekday, start and end time, and `max_patients` (1–200, default 20). There are no fixed times per patient. A booking takes a numbered place in a session and patients are seen in number order. Weekdays use `0` for Monday through `4` for Friday. Unavailability records use `start_at` and `end_at`, so they can block part of a day, a full day or several days.
 
 - `GET /api/doctors/{doctor_id}/availability` — list weekly availability.
 - `POST /api/doctors/{doctor_id}/availability` — add an availability period.
@@ -209,11 +209,11 @@ No login is required for these endpoints:
 | --- | --- |
 | `GET /api/doctors` | Browse active doctors |
 | `GET /api/doctors/{doctor_id}` | View public doctor details |
-| `GET /api/doctors/{doctor_id}/available-slots?day=2030-01-07` | Browse slots |
-| `GET /api/doctors/{doctor_id}/booking-status?day=2030-01-07` | Check remaining capacity |
-| `POST /api/guest/appointments` | Book using name, phone, doctor and time |
+| `GET /api/doctors/{doctor_id}/sessions?day=2030-01-07` | List the day's sessions with `max_patients` and `remaining` places |
+| `GET /api/doctors/{doctor_id}/booking-status?day=2030-01-07` | Check `remaining_places` across the day |
+| `POST /api/guest/appointments` | Book using name, phone, doctor and session |
 
-Example guest request (choose an actual available future slot):
+Example guest request. `start_at` is the start of a listed session that has places left:
 
 ```json
 {
@@ -224,13 +224,13 @@ Example guest request (choose an actual available future slot):
 }
 ```
 
-The response contains `id`, `doctor_id`, `start_at`, `end_at`, `status`, and a one-time-displayed `management_token`. Save the token securely. The API sends `Cache-Control: no-store`. It does not expose the patient ID, contact details or token hash.
+The response contains `id`, `doctor_id`, the session's `start_at` and `end_at`, the patient's `appointment_number`, `status`, and a one-time-displayed `management_token`. Save the token securely. The API sends `Cache-Control: no-store`. It does not expose the patient ID, contact details or token hash.
 
 Send the token in the `X-Booking-Token` header for:
 
 - `GET /api/guest/appointments/{appointment_id}`
 - `PUT /api/guest/appointments/{appointment_id}/cancel`
-- `PUT /api/guest/appointments/{appointment_id}/reschedule` with `{"start_at": "...timezone-aware datetime..."}`
+- `PUT /api/guest/appointments/{appointment_id}/reschedule` with `{"start_at": "...the new session's timezone-aware start..."}`
 
 Tokens are scoped to a single booking and expire 24 hours after its current end time. They cannot retrieve patient records or other bookings. Lost tokens require staff assistance; the API does not recover them using an unverified phone number.
 
@@ -302,17 +302,19 @@ Patients can change their password and log out. They cannot use staff patient, s
 
 ## Staff appointments and queues
 
-`POST /api/appointments` accepts `doctor_id`, `patient_id`, and timezone-aware `start_at`. It requires an administrator or the assigned doctor. The same permissions apply to reading, cancelling and rescheduling through `/api/appointments/{appointment_id}`.
+`POST /api/appointments` accepts `doctor_id`, `patient_id`, and the timezone-aware `start_at` of a session. It requires an administrator or the assigned doctor. The same permissions apply to reading, cancelling and rescheduling through `/api/appointments/{appointment_id}`.
 
 - `POST /api/appointments/{appointment_id}/check-in` accepts `{}` on the clinic-local appointment date.
-- `POST /api/visits/walk-in` accepts `doctor_id` and `patient_id` and reserves the next available slot.
+- `POST /api/visits/walk-in` accepts `doctor_id` and `patient_id` and gives the patient the next free number in today's earliest open session.
 - `GET /api/doctors/{doctor_id}/queue` returns the assigned doctor's queue; optional `day` defaults to the clinic-local date.
 - `GET /api/visits/{visit_id}` returns an authorized visit.
 - `PATCH /api/visits/{visit_id}` accepts only `status`.
 
 Visits move from `waiting` to `in_progress` to `completed`. Waiting or in-progress visits may be cancelled. Completed/cancelled visits cannot be edited. Completing or cancelling a visit also updates its appointment. Checked-in bookings must be managed through the staff visit workflow.
 
-Database row locks serialize booking and queue allocation per doctor. Conflicting bookings return 409, and failed guest bookings do not leave orphan patient records. Cancelled reservations release capacity.
+Each booking gets the lowest number not held in its session, so a cancelled number is given to the next booking. Rescheduling into another session gives a new number; rescheduling into the same session keeps it. Time off that overlaps any part of a session closes the whole session. Queues are ordered by session and then by appointment number, not by arrival. A visit's `queue_number` records check-in order; `appointment_number` is the number the patient was given.
+
+Database row locks serialize booking and queue allocation per doctor. Bookings for a full session return 409, and failed guest bookings do not leave orphan patient records. Cancelled reservations release capacity.
 
 ## Existing database upgrade
 
@@ -322,7 +324,7 @@ New installations create the revised schema automatically. Existing installation
 python -m app.db.initialize
 ```
 
-This adds guest-token/account ownership columns and makes birth date optional. It also moves older schemas to the current columns: each legacy `doctor_unavailability.unavailable_date` becomes a whole clinic-local day in `start_at`/`end_at`, and the legacy patient `sex` column is copied into `gender`. The command is safe to run repeatedly. It preserves existing rows, keeps the legacy columns (no longer required), and does not delete legacy clinical data.
+This adds guest-token/account ownership columns and makes birth date optional. It also moves older schemas to the current columns: each legacy `doctor_unavailability.unavailable_date` becomes a whole clinic-local day in `start_at`/`end_at`, and the legacy patient `sex` column is copied into `gender`. Sessions that used fixed-length slots get `max_patients` equal to their old slot count. Upcoming slot bookings move to the start and end of their session and are numbered in their old time order. Past and cancelled bookings keep their times. The command is safe to run repeatedly. It preserves existing rows, keeps the legacy columns (no longer required), and does not delete legacy clinical data.
 
 To permanently remove the old clinical columns and their contents after the clinic has authorized their deletion, run:
 
@@ -389,7 +391,7 @@ erDiagram
         int weekday
         time start_time
         time end_time
-        int slot_duration_minutes
+        int max_patients
         boolean is_active
     }
 
@@ -407,6 +409,7 @@ erDiagram
         int patient_id FK
         datetime start_at
         datetime end_at
+        int appointment_number
         string guest_token_hash
         int booked_by_user_id FK
         string status
@@ -434,6 +437,6 @@ All routes below require a staff bearer token. Doctors can browse and update onl
 - `GET /api/admin/users/{user_id}`: reads an account and its optional doctor profile.
 - `PATCH /api/admin/users/{user_id}`: changes `role` and/or `is_active`. Assigning the doctor role to an account without a profile requires the nested `doctor` object described above. Existing profiles are retained for appointment/visit history, disabled when the account leaves the doctor role, and reactivated when it returns. Edit existing profile details through the doctor endpoints. Role/activity changes revoke existing sessions; reactivation requires a fresh login. The last active administrator cannot be demoted or disabled, including through concurrent requests. Startup seeding preserves account administration changes.
 
-Schedule edits now reject conflicts with HTTP 409. Removing, disabling, moving, or shortening a weekly period cannot strand an ongoing or future scheduled booking previously covered by it. Adding or moving an unavailable period cannot overlap such bookings. Resolve the bookings first through rescheduling, cancellation, or visit management. Changing slot duration keeps existing reservation times when they still fit within working hours. Schedule mutations share the doctor's booking lock, so a concurrent booking and conflicting schedule edit cannot both succeed. Historical and terminal bookings do not prevent schedule edits.
+Schedule edits now reject conflicts with HTTP 409. A session with ongoing or future scheduled bookings cannot be removed, disabled, moved to another weekday or start time, or limited below the highest number already booked. Changing only its end time or raising its limit is allowed, and the session's bookings take the new end time. Adding or moving an unavailable period cannot overlap such bookings. Resolve the bookings first through rescheduling, cancellation, or visit management. Schedule mutations share the doctor's booking lock, so a concurrent booking and conflicting schedule edit cannot both succeed. Historical and terminal bookings do not prevent schedule edits.
 
 These additions use the existing database schema and need no database migration.

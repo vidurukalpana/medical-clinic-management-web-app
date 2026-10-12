@@ -77,6 +77,6 @@ class UnavailabilityOverlapError(ConflictError):
 
 
 class DoctorFullyBookedError(ConflictError):
-    """Raised when no consultation slots remain for a doctor."""
+    """Raised when no places remain in a doctor's sessions."""
 
-    default_detail = "Doctor is fully booked. No consultation slots remain today."
+    default_detail = "Doctor is fully booked. No places remain in today's sessions."

@@ -7,21 +7,13 @@ class AvailabilityCreate(BaseModel):
     weekday: int = Field(ge=0, le=4)
     start_time: time
     end_time: time
-    slot_duration_minutes: int = Field(default=10, ge=5, le=240)
+    max_patients: int = Field(default=20, ge=1, le=200)
     is_active: bool = True
 
     @model_validator(mode="after")
     def validate_working_period(self) -> "AvailabilityCreate":
-        start_seconds = _time_in_seconds(self.start_time)
-        end_seconds = _time_in_seconds(self.end_time)
-        if start_seconds >= end_seconds:
+        if _time_in_seconds(self.start_time) >= _time_in_seconds(self.end_time):
             raise ValueError("start_time must be earlier than end_time.")
-
-        working_minutes = (end_seconds - start_seconds) / 60
-        if self.slot_duration_minutes > working_minutes:
-            raise ValueError(
-                "slot_duration_minutes must fit within the availability period."
-            )
         return self
 
 
@@ -33,7 +25,7 @@ class AvailabilityRead(BaseModel):
     weekday: int
     start_time: time
     end_time: time
-    slot_duration_minutes: int
+    max_patients: int
     is_active: bool
 
 

@@ -11,14 +11,6 @@ import { DoctorSelect } from "./QuickActions";
 
 const WEEKDAYS = [0, 1, 2, 3, 4];
 
-function minutesBetween(start: string, end: string) {
-  const toMinutes = (value: string) => {
-    const [h, m] = value.split(":").map(Number);
-    return h * 60 + m;
-  };
-  return toMinutes(end) - toMinutes(start);
-}
-
 function AvailabilityModal({ doctorId, editing, defaultWeekday, onClose }: {
   doctorId: number;
   editing: Availability | null;
@@ -33,24 +25,22 @@ function AvailabilityModal({ doctorId, editing, defaultWeekday, onClose }: {
           weekday: editing.weekday,
           start_time: editing.start_time.slice(0, 5),
           end_time: editing.end_time.slice(0, 5),
-          slot_duration_minutes: editing.slot_duration_minutes,
+          max_patients: editing.max_patients,
           is_active: editing.is_active,
         }
-      : { weekday: defaultWeekday, start_time: "09:00", end_time: "12:00", slot_duration_minutes: 10, is_active: true },
+      : { weekday: defaultWeekday, start_time: "09:00", end_time: "12:00", max_patients: 20, is_active: true },
   );
   const mutation = useMutation({
     mutationFn: () =>
       editing ? api.replaceAvailability(doctorId, editing.id, form) : api.addAvailability(doctorId, form),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["availability", doctorId] });
-      queryClient.invalidateQueries({ queryKey: ["slots"] });
+      queryClient.invalidateQueries({ queryKey: ["sessions"] });
       queryClient.invalidateQueries({ queryKey: ["booking-status"] });
       toast(editing ? "Session updated" : "Session added");
       onClose();
     },
   });
-  const span = minutesBetween(form.start_time, form.end_time);
-  const slots = span > 0 ? Math.floor(span / form.slot_duration_minutes) : 0;
 
   return (
     <Modal open title={editing ? "Edit consulting session" : "Add consulting session"} onClose={onClose}>
@@ -94,14 +84,17 @@ function AvailabilityModal({ doctorId, editing, defaultWeekday, onClose }: {
             />
           </Field>
         </div>
-        <Field label="Minutes per patient" hint={slots > 0 ? `${slots} appointment slots in this session` : "End must be after start"}>
+        <Field
+          label="Patients per session"
+          hint={form.end_time > form.start_time ? "Patients get numbers 1, 2, 3… and are seen in that order" : "End must be after start"}
+        >
           <input
             className="input"
             type="number"
-            min={5}
-            max={240}
-            value={form.slot_duration_minutes}
-            onChange={(event) => setForm({ ...form, slot_duration_minutes: Number(event.target.value) })}
+            min={1}
+            max={200}
+            value={form.max_patients}
+            onChange={(event) => setForm({ ...form, max_patients: Number(event.target.value) })}
             required
           />
         </Field>
@@ -143,7 +136,7 @@ function TimeOffForm({ doctorId }: { doctorId: number }) {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["unavailability", doctorId] });
-      queryClient.invalidateQueries({ queryKey: ["slots"] });
+      queryClient.invalidateQueries({ queryKey: ["sessions"] });
       queryClient.invalidateQueries({ queryKey: ["booking-status"] });
       setReason("");
       toast("Time off added");
@@ -200,7 +193,7 @@ export function SchedulePage() {
     mutationFn: (id: number) => api.deleteAvailability(doctorId!, id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["availability", doctorId] });
-      queryClient.invalidateQueries({ queryKey: ["slots"] });
+      queryClient.invalidateQueries({ queryKey: ["sessions"] });
       toast("Session removed");
     },
     onError: (error) => toast((error as Error).message, "error"),
@@ -209,7 +202,7 @@ export function SchedulePage() {
     mutationFn: (id: number) => api.deleteUnavailability(doctorId!, id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["unavailability", doctorId] });
-      queryClient.invalidateQueries({ queryKey: ["slots"] });
+      queryClient.invalidateQueries({ queryKey: ["sessions"] });
       toast("Time off removed");
     },
     onError: (error) => toast((error as Error).message, "error"),
@@ -260,10 +253,7 @@ export function SchedulePage() {
                           <strong>
                             {formatClock(session.start_time)} – {formatClock(session.end_time)}
                           </strong>
-                          <span className="small">
-                            {session.slot_duration_minutes} min slots ·{" "}
-                            {Math.floor(minutesBetween(session.start_time, session.end_time) / session.slot_duration_minutes)} patients
-                          </span>
+                          <span className="small">Up to {session.max_patients} patients</span>
                           {!session.is_active && <span className="chip">Paused</span>}
                           <div className="session-tools">
                             <button className="icon-btn" aria-label="Edit session" onClick={() => setModal({ editing: session, weekday: day })}>

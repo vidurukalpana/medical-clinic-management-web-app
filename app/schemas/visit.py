@@ -44,6 +44,7 @@ class VisitRead(BaseModel):
     patient_id: int
     visit_date: date
     queue_number: int
+    appointment_number: int | None
     start_at: datetime | None
     end_at: datetime | None
     status: VisitStatus

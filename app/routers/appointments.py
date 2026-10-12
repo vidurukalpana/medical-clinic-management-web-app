@@ -11,7 +11,7 @@ from app.errors import AuthenticationRequiredError, ForbiddenError
 from app.errors.appointments import save_appointment
 from app.models import Appointment, Doctor, User, UserRole
 from app.schemas.appointment import (
-    AppointmentPage, AppointmentCreate, AppointmentRead, AppointmentReschedule, AvailableSlot, BookingStatus,
+    AppointmentPage, AppointmentCreate, AppointmentRead, AppointmentReschedule, BookingSession, BookingStatus,
     GuestBookingConfirmation, GuestBookingCreate, GuestBookingRead,
 )
 from app.schemas.patient import PatientCreate
@@ -42,13 +42,13 @@ def managed_appointment(
 ManagedAppointment = Annotated[tuple[Doctor, Appointment], Depends(managed_appointment)]
 
 
-@router.get("/doctors/{doctor_id}/available-slots", response_model=list[AvailableSlot])
-def read_available_slots(
+@router.get("/doctors/{doctor_id}/sessions", response_model=list[BookingSession])
+def read_booking_sessions(
     doctor_id: int, day: Annotated[date, Query()],
     db: DatabaseSession, settings: AppSettings,
-) -> list[AvailableSlot]:
+) -> list[BookingSession]:
     doctor = appointments.get_booking_doctor(db, doctor_id)
-    return appointments.available_slots(db, doctor, day, settings.timezone)
+    return appointments.booking_sessions(db, doctor, day, settings.timezone)
 
 
 @router.post("/appointments", response_model=AppointmentRead, status_code=status.HTTP_201_CREATED)
@@ -122,8 +122,10 @@ def read_booking_status(
     db: DatabaseSession, settings: AppSettings,
 ) -> BookingStatus:
     doctor = appointments.get_booking_doctor(db, doctor_id)
-    slots = appointments.available_slots(db, doctor, day, settings.timezone)
-    return BookingStatus(remaining_slots=len(slots), is_fully_booked=not slots)
+    remaining = sum(session.remaining for session in appointments.booking_sessions(
+        db, doctor, day, settings.timezone,
+    ))
+    return BookingStatus(remaining_places=remaining, is_fully_booked=not remaining)
 
 
 @router.post("/guest/appointments", response_model=GuestBookingConfirmation, status_code=201)
@@ -132,7 +134,7 @@ def book_as_guest(
     response: Response, user: OptionalUser,
 ) -> GuestBookingConfirmation:
     doctor = appointments.get_booking_doctor(db, data.doctor_id, lock=True)
-    appointments.select_slot(db, doctor, data.start_at, settings.timezone)
+    appointments.select_session(db, doctor, data.start_at, settings.timezone)
     # Never link an unverified guest to an existing patient by name or phone.
     patient = create_patient(db, PatientCreate(full_name=data.full_name, phone=data.phone), commit=False)
     appointment = appointments.create_appointment(db, doctor, AppointmentCreate(

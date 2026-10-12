@@ -17,22 +17,28 @@ class AppointmentCreate(AppointmentReschedule):
     patient_id: int = Field(gt=0)
 
 
-class AvailableSlot(BaseModel):
+class SessionTime(BaseModel):
     start_at: datetime
     end_at: datetime
 
 
-class AppointmentRead(AvailableSlot):
+class BookingSession(SessionTime):
+    max_patients: int
+    remaining: int
+
+
+class AppointmentRead(SessionTime):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
     doctor_id: int
     patient_id: int
+    appointment_number: int
     status: Literal["scheduled", "completed", "cancelled", "no_show"]
 
 
 class BookingStatus(BaseModel):
-    remaining_slots: int
+    remaining_places: int
     is_fully_booked: bool
 
 
@@ -44,11 +50,12 @@ class GuestBookingCreate(AppointmentReschedule):
     phone: str = Field(pattern=r"^\+?[0-9][0-9 ()-]{5,28}[0-9]$")
 
 
-class GuestBookingRead(AvailableSlot):
+class GuestBookingRead(SessionTime):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
     doctor_id: int
+    appointment_number: int
     status: Literal["scheduled", "completed", "cancelled", "no_show"]
 
 

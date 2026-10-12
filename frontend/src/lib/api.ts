@@ -39,23 +39,30 @@ export interface Page<T> {
   offset: number;
   limit: number;
 }
-export interface Slot {
+export interface SessionTime {
   start_at: string;
   end_at: string;
 }
+/** A consulting session on one day; patients are seen in number order. */
+export interface BookingSession extends SessionTime {
+  max_patients: number;
+  remaining: number;
+}
 export interface BookingStatus {
-  remaining_slots: number;
+  remaining_places: number;
   is_fully_booked: boolean;
 }
-export interface Appointment extends Slot {
+export interface Appointment extends SessionTime {
   id: number;
   doctor_id: number;
   patient_id: number;
+  appointment_number: number;
   status: AppointmentStatus;
 }
-export interface GuestBooking extends Slot {
+export interface GuestBooking extends SessionTime {
   id: number;
   doctor_id: number;
+  appointment_number: number;
   status: AppointmentStatus;
 }
 export interface GuestBookingConfirmation extends GuestBooking {
@@ -88,6 +95,7 @@ export interface Visit {
   patient_id: number;
   visit_date: string;
   queue_number: number;
+  appointment_number: number | null;
   start_at: string | null;
   end_at: string | null;
   status: VisitStatus;
@@ -138,7 +146,7 @@ export interface Availability {
   weekday: number;
   start_time: string;
   end_time: string;
-  slot_duration_minutes: number;
+  max_patients: number;
   is_active: boolean;
 }
 export type AvailabilityInput = Omit<Availability, "id" | "doctor_id">;
@@ -283,9 +291,9 @@ export const api = {
   updateDoctor: (id: number, body: Partial<Omit<Doctor, "id" | "user_id">>) =>
     request<Doctor>(`/doctors/${id}`, { method: "PATCH", body }),
 
-  // Slots
-  availableSlots: (doctorId: number, day: string) =>
-    request<Slot[]>(`/doctors/${doctorId}/available-slots`, { query: { day }, auth: false }),
+  // Sessions
+  sessions: (doctorId: number, day: string) =>
+    request<BookingSession[]>(`/doctors/${doctorId}/sessions`, { query: { day }, auth: false }),
   bookingStatus: (doctorId: number, day: string) =>
     request<BookingStatus>(`/doctors/${doctorId}/booking-status`, { query: { day }, auth: false }),
 

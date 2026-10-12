@@ -52,7 +52,7 @@ erDiagram
         int weekday
         time start_time
         time end_time
-        int slot_duration_minutes
+        int max_patients
         boolean is_active
     }
 
@@ -70,6 +70,7 @@ erDiagram
         int patient_id FK
         datetime start_at
         datetime end_at
+        int appointment_number
         string guest_token_hash
         int booked_by_user_id FK
         string status

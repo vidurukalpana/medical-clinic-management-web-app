@@ -11,7 +11,7 @@ from app.schemas.visit import (
     DashboardVisit, DoctorQueue, VisitUpdate,
 )
 from app.services.patients import get_patient
-from app.services.appointments import available_slots
+from app.services.appointments import booking_sessions, next_appointment_number
 
 
 def clinic_today(clinic_timezone: str) -> date:
@@ -31,7 +31,8 @@ def list_queue(db: Session, doctor_id: int, day: date) -> list[Visit]:
         .outerjoin(Visit.appointment)
         .options(joinedload(Visit.appointment))
         .where(Visit.doctor_id == doctor_id, Visit.visit_date == day)
-        .order_by(Appointment.start_at.asc().nulls_last(), Visit.queue_number)
+        .order_by(Appointment.start_at.asc().nulls_last(),
+                  Appointment.appointment_number, Visit.queue_number)
     ))
 
 
@@ -77,18 +78,19 @@ def create_walk_in(
     db: Session, doctor: Doctor, patient_id: int,
     clinic_timezone: str,
 ) -> Visit:
-    """Reserve today's next free slot and queue the patient atomically."""
+    """Give the patient the next number in today's earliest open session and queue them atomically."""
     day = clinic_today(clinic_timezone)
     visit = create_visit(db, doctor, patient_id, day)
-    slots = available_slots(db, doctor, day, clinic_timezone)
-    if not slots:
+    session = next((session for session in booking_sessions(db, doctor, day, clinic_timezone)
+                    if session.remaining), None)
+    if session is None:
         raise DoctorFullyBookedError()
-    slot = slots[0]
     visit.appointment = Appointment(
         doctor_id=doctor.id,
         patient_id=patient_id,
-        start_at=slot.start_at,
-        end_at=slot.end_at,
+        start_at=session.start_at,
+        end_at=session.end_at,
+        appointment_number=next_appointment_number(db, doctor.id, session.start_at),
         status="scheduled",
     )
     return visit
@@ -151,7 +153,7 @@ def dashboard(
         .outerjoin(Visit, Visit.appointment_id == Appointment.id)
         .where(Appointment.doctor_id.in_(doctor_ids),
                Appointment.start_at >= start, Appointment.start_at < end)
-        .order_by(Appointment.start_at, Appointment.id)
+        .order_by(Appointment.start_at, Appointment.appointment_number, Appointment.id)
     ).all()
     appointment_items = []
     for appointment, patient_name, visit_id in appointment_rows:
@@ -166,7 +168,7 @@ def dashboard(
                                            path=f"/api/appointments/{appointment.id}/cancel"))
         appointment_items.append(DashboardAppointment(
             **{key: getattr(appointment, key) for key in
-               ("id", "doctor_id", "patient_id", "start_at", "end_at", "status")},
+               ("id", "doctor_id", "patient_id", "start_at", "end_at", "appointment_number", "status")},
             patient_name=patient_name, doctor_name=doctor_names[appointment.doctor_id],
             visit_id=visit_id, actions=actions,
         ))
@@ -176,7 +178,8 @@ def dashboard(
         .outerjoin(Visit.appointment)
         .options(joinedload(Visit.appointment))
         .where(Visit.doctor_id.in_(doctor_ids), Visit.visit_date == day)
-        .order_by(Appointment.start_at.asc().nulls_last(), Visit.queue_number, Visit.id)
+        .order_by(Appointment.start_at.asc().nulls_last(), Appointment.appointment_number,
+                  Visit.queue_number, Visit.id)
     ).all()
     queues: dict[int, list[DashboardVisit]] = {doctor.id: [] for doctor in doctors}
     for visit, patient_name in visit_rows:
@@ -186,7 +189,7 @@ def dashboard(
         queues[visit.doctor_id].append(DashboardVisit(
             **{key: getattr(visit, key) for key in
                ("id", "appointment_id", "doctor_id", "patient_id", "visit_date",
-                "queue_number", "start_at", "end_at", "status")},
+                "queue_number", "appointment_number", "start_at", "end_at", "status")},
             patient_name=patient_name,
             actions=[
                 DashboardAction(label="Start" if visit.status == "waiting" else "Complete",

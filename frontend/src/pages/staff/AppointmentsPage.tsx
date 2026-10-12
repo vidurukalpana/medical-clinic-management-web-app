@@ -84,10 +84,10 @@ export function AppointmentsPage() {
 
   const reschedule = useMutation({
     mutationFn: (startAt: string) => api.rescheduleAppointment(moving!.id, startAt),
-    onSuccess: () => {
+    onSuccess: (result) => {
       setMoving(null);
       queryClient.invalidateQueries();
-      toast("Appointment moved");
+      toast(`Appointment moved. New number: ${result.appointment_number}`);
     },
     onError: (error) => toast((error as Error).message, "error"),
   });
@@ -164,8 +164,8 @@ export function AppointmentsPage() {
                     {items.map((appointment) => (
                       <tr key={appointment.id}>
                         <td className="nowrap">
-                          <strong>{formatTime(appointment.start_at)}</strong>
-                          <span className="muted small"> – {formatTime(appointment.end_at)}</span>
+                          <strong>No. {appointment.appointment_number}</strong>
+                          <span className="muted small"> · {formatTime(appointment.start_at)} session</span>
                         </td>
                         <td>
                           <PatientCell id={appointment.patient_id} />
@@ -195,7 +195,7 @@ export function AppointmentsPage() {
           doctorId={moving.doctor_id}
           onClose={() => setMoving(null)}
           busy={reschedule.isPending}
-          onConfirm={(slot) => reschedule.mutate(slot.start_at)}
+          onConfirm={(session) => reschedule.mutate(session.start_at)}
         />
       )}
       <BookAppointmentModal open={booking} onClose={() => setBooking(false)} />
