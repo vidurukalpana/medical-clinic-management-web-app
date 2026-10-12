@@ -1,10 +1,11 @@
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { CalendarCheck, CalendarClock, Clock, Radio, Stethoscope } from "lucide-react";
+import { CalendarCheck, CalendarClock, Clock, QrCode, Radio, Stethoscope } from "lucide-react";
 import type { BookingSession, GuestBooking } from "../lib/api";
 import { useNextOpenSession } from "../lib/hooks";
 import { formatDay, formatTime, clinicDate, liveQueueLink } from "../lib/time";
 import { SessionPicker } from "./SessionPicker";
+import { CheckInQr } from "./CheckInQr";
 import { Button, Modal, StatusBadge } from "./ui";
 
 export function BookingTicket({ booking, doctorName, actions }: {
@@ -12,6 +13,7 @@ export function BookingTicket({ booking, doctorName, actions }: {
   doctorName?: string;
   actions?: ReactNode;
 }) {
+  const [showQr, setShowQr] = useState(false);
   const day = clinicDate(new Date(booking.start_at));
   const date = new Date(`${day}T12:00:00Z`);
   return (
@@ -36,6 +38,12 @@ export function BookingTicket({ booking, doctorName, actions }: {
         {needsNewDate(booking) && (
           <p className="ticket-note">We're sorry, the clinic had to cancel this session. Please move your booking to another date.</p>
         )}
+        {isUpcoming(booking) && (
+          <button type="button" className="link-arrow small ticket-qr-toggle" onClick={() => setShowQr((value) => !value)}>
+            <QrCode size={14} /> {showQr ? "Hide check-in QR" : "Show check-in QR"}
+          </button>
+        )}
+        {showQr && isUpcoming(booking) && <CheckInQr code={booking.checkin_code} size={150} />}
         {booking.status === "scheduled" && day === clinicDate() && (
           <Link to={liveQueueLink(booking)} className="link-arrow small">
             <Radio size={14} /> See where the queue is

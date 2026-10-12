@@ -161,6 +161,20 @@ def _upgrade_appointment_numbers(connection: Connection, timezone: str) -> None:
     ))
 
 
+def _upgrade_checkin_codes(connection: Connection) -> None:
+    """Give every existing booking a check-in code for its QR."""
+    if _has_column(connection, "appointments", "checkin_code"):
+        return
+    connection.execute(text("ALTER TABLE appointments ADD COLUMN checkin_code VARCHAR(12)"))
+    connection.execute(text(
+        "UPDATE appointments SET checkin_code = upper(substr(md5(random()::text || id::text), 1, 10))"
+    ))
+    connection.execute(text("ALTER TABLE appointments ALTER COLUMN checkin_code SET NOT NULL"))
+    connection.execute(text(
+        "ALTER TABLE appointments ADD CONSTRAINT appointments_checkin_code_key UNIQUE (checkin_code)"
+    ))
+
+
 def upgrade_booking_schema(
     database_engine: Engine, *, purge_clinical_data: bool = False, timezone: str | None = None,
 ) -> None:
@@ -184,6 +198,7 @@ def upgrade_booking_schema(
         # New tables such as session_arrivals.
         Base.metadata.create_all(bind=connection)
         connection.execute(text("ALTER TABLE session_arrivals ADD COLUMN IF NOT EXISTS left_at TIMESTAMP WITH TIME ZONE"))
+        _upgrade_checkin_codes(connection)
         _upgrade_appointment_numbers(connection, timezone)
         if purge_clinical_data:
             connection.execute(text("ALTER TABLE appointments DROP COLUMN IF EXISTS reason"))
