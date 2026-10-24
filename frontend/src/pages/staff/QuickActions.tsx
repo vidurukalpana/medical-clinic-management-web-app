@@ -1,13 +1,14 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { CalendarPlus, Footprints, UserPlus } from "lucide-react";
+import { CalendarPlus, Footprints, ScanLine, UserPlus } from "lucide-react";
 import { api, type Gender, type Patient, type PatientInput } from "../../lib/api";
 import { useStaffDoctors } from "../../lib/hooks";
 import { clinicDate, formatDay, formatTime } from "../../lib/time";
 import { PatientPicker } from "../../components/PatientPicker";
-import { SlotPicker } from "../../components/SlotPicker";
+import { SessionPicker } from "../../components/SessionPicker";
 import { Button, ErrorNote, Field, Modal } from "../../components/ui";
 import { useToast } from "../../components/Toast";
+import { CheckInPanel } from "./CheckInPanel";
 
 const EMPTY_PATIENT: PatientInput = {
   full_name: "",
@@ -199,7 +200,9 @@ export function BookAppointmentModal({ open, onClose, initialPatient }: {
     mutationFn: () => api.createAppointment({ doctor_id: doctorId!, patient_id: patient!.id, start_at: startAt! }),
     onSuccess: (appointment) => {
       queryClient.invalidateQueries();
-      toast(`Booked ${patient?.full_name} for ${formatDay(clinicDate(new Date(appointment.start_at)), "short")}, ${formatTime(appointment.start_at)}`);
+      toast(
+        `Booked ${patient?.full_name} as No. ${appointment.appointment_number} for ${formatDay(clinicDate(new Date(appointment.start_at)), "short")}, ${formatTime(appointment.start_at)} session`,
+      );
       onClose();
     },
   });
@@ -221,7 +224,7 @@ export function BookAppointmentModal({ open, onClose, initialPatient }: {
             loading={mutation.isPending}
             onClick={() => mutation.mutate()}
           >
-            Book {startAt ? formatTime(startAt) : ""}
+            Book {startAt ? formatDay(clinicDate(new Date(startAt)), "short") : ""}
           </Button>
         </>
       }
@@ -242,7 +245,8 @@ export function BookAppointmentModal({ open, onClose, initialPatient }: {
           </Field>
         </div>
         {doctorId && (
-          <SlotPicker
+          <SessionPicker
+            allPlaces
             doctorId={doctorId}
             day={day}
             onDayChange={(next) => {
@@ -250,7 +254,7 @@ export function BookAppointmentModal({ open, onClose, initialPatient }: {
               setStartAt(null);
             }}
             value={startAt}
-            onChange={(slot) => setStartAt(slot.start_at)}
+            onChange={(session) => setStartAt(session.start_at)}
           />
         )}
         <ErrorNote error={mutation.error} />
@@ -277,7 +281,9 @@ export function WalkInModal({ open, onClose, initialPatient }: {
     mutationFn: () => api.walkIn(doctorId!, patient!.id),
     onSuccess: (visit) => {
       queryClient.invalidateQueries();
-      toast(`${patient?.full_name} added to the queue as #${visit.queue_number}${visit.start_at ? ` (${formatTime(visit.start_at)})` : ""}`);
+      toast(
+        `${patient?.full_name} added to the queue as No. ${visit.appointment_number ?? visit.queue_number}${visit.start_at ? ` (${formatTime(visit.start_at)} session)` : ""}`,
+      );
       onClose();
     },
   });
@@ -304,7 +310,7 @@ export function WalkInModal({ open, onClose, initialPatient }: {
       }
     >
       <div className="stack">
-        <p className="muted">The patient gets the doctor's next free slot today and joins the live queue.</p>
+        <p className="muted">The patient gets the next free number in the doctor's session today and joins the live queue.</p>
         <Field label="Doctor">
           <DoctorSelect value={doctorId} onChange={setDoctorId} />
         </Field>
@@ -318,7 +324,7 @@ export function WalkInModal({ open, onClose, initialPatient }: {
 }
 
 export function QuickActionButtons() {
-  const [modal, setModal] = useState<"register" | "book" | "walkin" | null>(null);
+  const [modal, setModal] = useState<"register" | "book" | "walkin" | "scan" | null>(null);
   const close = () => setModal(null);
   return (
     <>
@@ -335,19 +341,29 @@ export function QuickActionButtons() {
             <CalendarPlus size={20} />
           </span>
           <strong>Book appointment</strong>
-          <small>Reserve a future slot</small>
+          <small>Reserve a place in a session</small>
         </button>
         <button className="quick-action qa-coral" onClick={() => setModal("walkin")}>
           <span>
             <Footprints size={20} />
           </span>
           <strong>Add walk-in</strong>
-          <small>Queue for the next free slot</small>
+          <small>Next number in today's session</small>
+        </button>
+        <button className="quick-action qa-blue" onClick={() => setModal("scan")}>
+          <span>
+            <ScanLine size={20} />
+          </span>
+          <strong>Scan check-in</strong>
+          <small>From the patient's QR code</small>
         </button>
       </div>
       <RegisterPatientModal open={modal === "register"} onClose={close} />
       <BookAppointmentModal open={modal === "book"} onClose={close} />
       <WalkInModal open={modal === "walkin"} onClose={close} />
+      <Modal open={modal === "scan"} title="Scan check-in" onClose={close} wide>
+        {modal === "scan" && <CheckInPanel />}
+      </Modal>
     </>
   );
 }

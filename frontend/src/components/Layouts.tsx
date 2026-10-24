@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
+  MessageSquare,
   LayoutDashboard,
   CalendarDays,
   Users,
@@ -19,6 +20,8 @@ import {
 import { useAuth } from "../lib/auth";
 import { useStaffTheme, type ThemePreference } from "../lib/theme";
 import { Avatar, Spinner } from "./ui";
+import { ChatWidget } from "./ChatWidget";
+import { SiteFooter } from "./SiteFooter";
 
 export function Brand({ to = "/" }: { to?: string }) {
   return (
@@ -54,7 +57,9 @@ export function PublicLayout() {
             <NavLink to="/" end>
               Home
             </NavLink>
+            <NavLink to="/doctors">Doctors</NavLink>
             <NavLink to="/book">Book a visit</NavLink>
+            <NavLink to="/live">Live queue</NavLink>
             <NavLink to="/manage">Manage booking</NavLink>
             {user?.role === "patient" && <NavLink to="/my-bookings">My bookings</NavLink>}
             {isStaff && <NavLink to="/staff">Staff portal</NavLink>}
@@ -76,15 +81,8 @@ export function PublicLayout() {
       <main>
         <Outlet />
       </main>
-      <footer className="site-footer">
-        <div className="container footer-inner">
-          <Brand />
-          <p className="muted">
-            Booking only needs a name and phone number. We never ask for symptoms or medical details online.
-          </p>
-          <span className="muted">© {new Date().getFullYear()} CareFlow Clinic</span>
-        </div>
-      </footer>
+      <SiteFooter />
+      <ChatWidget />
     </div>
   );
 }
@@ -98,6 +96,7 @@ const STAFF_NAV = [
 const ADMIN_NAV = [
   { to: "/staff/doctors", label: "Doctors", icon: Stethoscope },
   { to: "/staff/users", label: "Accounts", icon: ShieldCheck },
+  { to: "/staff/sms", label: "SMS outbox", icon: MessageSquare },
 ];
 
 const THEME_OPTIONS: { value: ThemePreference; label: string; icon: typeof Sun }[] = [
@@ -168,7 +167,7 @@ export function StaffLayout() {
           <ThemeSwitch />
           <NavLink to="/staff/account" className="sidebar-user">
             <Avatar name={name} size={36} />
-            <span>
+            <span className="sidebar-user-text">
               <strong>{name}</strong>
               <small>{user.role === "administrator" ? "Administrator" : "Doctor"}</small>
             </span>

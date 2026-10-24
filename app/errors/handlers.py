@@ -10,6 +10,8 @@ from app.errors.exceptions import (
     ConflictError,
     ForbiddenError,
     NotFoundError,
+    ServiceUnavailableError,
+    TooManyRequestsError,
 )
 
 
@@ -24,11 +26,11 @@ async def handle_application_error(
 ) -> JSONResponse:
     """Convert an expected application error into a JSON API response."""
     status_code = _status_code_for(error)
-    headers = (
-        {"WWW-Authenticate": "Bearer"}
-        if isinstance(error, AuthenticationRequiredError)
-        else None
-    )
+    headers = None
+    if isinstance(error, AuthenticationRequiredError):
+        headers = {"WWW-Authenticate": "Bearer"}
+    elif isinstance(error, TooManyRequestsError):
+        headers = {"Retry-After": str(error.retry_after)}
     return JSONResponse(
         status_code=status_code,
         content={"detail": error.detail},
@@ -47,4 +49,8 @@ def _status_code_for(error: ApplicationError) -> int:
         return status.HTTP_404_NOT_FOUND
     if isinstance(error, ConflictError):
         return status.HTTP_409_CONFLICT
+    if isinstance(error, TooManyRequestsError):
+        return status.HTTP_429_TOO_MANY_REQUESTS
+    if isinstance(error, ServiceUnavailableError):
+        return status.HTTP_503_SERVICE_UNAVAILABLE
     return status.HTTP_500_INTERNAL_SERVER_ERROR

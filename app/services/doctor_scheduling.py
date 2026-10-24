@@ -10,10 +10,13 @@ from app.errors import (
     NotFoundError,
     UnavailabilityOverlapError,
 )
-from app.models import Appointment, Availability, Doctor, DoctorUnavailability
+from app.models import Appointment, Availability, Doctor, DoctorUnavailability, Patient, Visit
 from app.schemas.doctor_scheduling import (
+    AffectedBooking,
     AvailabilityCreate,
     DoctorUnavailabilityCreate,
+    SessionCancel,
+    SessionCancellationRead,
 )
 
 
@@ -79,7 +82,11 @@ def update_availability(
     ):
         raise AvailabilityOverlapError()
 
-    ensure_bookings_covered(db, availability, schedule, clinic_timezone)
+    bookings = ensure_bookings_covered(db, availability, schedule, clinic_timezone)
+    zone = ZoneInfo(clinic_timezone)
+    for booking in bookings:
+        # Keep booked sessions in step with a new end time.
+        booking.end_at = datetime.combine(booking.start_at.astimezone(zone).date(), schedule.end_time, zone)
     for field_name, value in schedule.model_dump().items():
         setattr(availability, field_name, value)
     db.commit()
@@ -239,27 +246,75 @@ def ensure_no_booking_conflict(
 def ensure_bookings_covered(
     db: Session, original: Availability, replacement: AvailabilityCreate | None,
     clinic_timezone: str,
-) -> None:
-    periods = list(db.scalars(select(Availability).where(
-        Availability.doctor_id == original.doctor_id,
-        Availability.id != original.id, Availability.is_active.is_(True),
-    )))
-    if replacement is not None and replacement.is_active:
-        periods.append(replacement)
-    bookings = db.scalars(select(Appointment).where(
-        Appointment.doctor_id == original.doctor_id,
-        Appointment.status == "scheduled",
-        Appointment.end_at > datetime.now(timezone.utc),
-    ))
+) -> list[Appointment]:
+    """Return the session's upcoming bookings, refusing changes that would strand them."""
+    if not original.is_active:
+        return []
     zone = ZoneInfo(clinic_timezone)
-    for booking in bookings:
-        start, end = booking.start_at.astimezone(zone), booking.end_at.astimezone(zone)
-        # Only protect bookings covered by the period being changed.
-        if not (original.is_active and start.weekday() == original.weekday
-                and start.date() == end.date()
-                and original.start_time <= start.time() and end.time() <= original.end_time):
-            continue
-        if not any(period.weekday == start.weekday()
-                   and period.start_time <= start.time() and end.time() <= period.end_time
-                   for period in periods):
-            raise ConflictError("Working hours conflict with an existing booking. Reschedule or cancel it first.")
+    bookings = [
+        booking for booking in db.scalars(select(Appointment).where(
+            Appointment.doctor_id == original.doctor_id,
+            Appointment.status == "scheduled",
+            Appointment.end_at > datetime.now(timezone.utc),
+        ))
+        # A booking belongs to the session that starts at its start time.
+        if booking.start_at.astimezone(zone).weekday() == original.weekday
+        and booking.start_at.astimezone(zone).time() == original.start_time
+    ]
+    if not bookings:
+        return []
+    if (replacement is None or not replacement.is_active
+            or replacement.weekday != original.weekday
+            or replacement.start_time != original.start_time):
+        raise ConflictError("This session has upcoming bookings. Reschedule or cancel them first.")
+    if max(booking.appointment_number for booking in bookings) > replacement.max_patients:
+        raise ConflictError("Upcoming bookings already hold numbers above this limit.")
+    return bookings
+
+
+def cancel_session(
+    db: Session, doctor_id: int, data: SessionCancel, clinic_timezone: str,
+) -> SessionCancellationRead:
+    """Close one session on one date and cancel its bookings so patients can move them."""
+    lock_schedule(db, doctor_id)
+    zone = ZoneInfo(clinic_timezone)
+    local_start = data.start_at.astimezone(zone)
+    schedule = db.scalar(select(Availability).where(
+        Availability.doctor_id == doctor_id,
+        Availability.weekday == local_start.weekday(),
+        Availability.start_time == local_start.time(),
+        Availability.is_active.is_(True),
+    ))
+    if schedule is None:
+        raise NotFoundError("Session")
+    end_at = datetime.combine(local_start.date(), schedule.end_time, zone)
+    if end_at <= datetime.now(timezone.utc):
+        raise ConflictError("This session has already ended.")
+    period = DoctorUnavailabilityCreate(start_at=data.start_at, end_at=end_at, reason=data.reason)
+    if _unavailability_overlaps(db, doctor_id, period):
+        raise ConflictError("This session is already closed by time off.")
+    rows = db.execute(
+        select(Appointment, Visit, Patient.full_name, Patient.phone)
+        .join(Patient, Patient.id == Appointment.patient_id)
+        .outerjoin(Visit, Visit.appointment_id == Appointment.id)
+        .where(Appointment.doctor_id == doctor_id, Appointment.start_at == data.start_at,
+               Appointment.status == "scheduled")
+        .order_by(Appointment.appointment_number)
+    ).all()
+    if any(visit is not None and visit.status == "in_progress" for _, visit, _, _ in rows):
+        raise ConflictError("A patient is with the doctor. Finish that visit before cancelling the session.")
+    for appointment, visit, _, _ in rows:
+        appointment.status = "cancelled"
+        appointment.cancelled_by_clinic = True
+        if visit is not None:
+            visit.status = "cancelled"
+    db.add(DoctorUnavailability(
+        doctor_id=doctor_id, start_at=data.start_at, end_at=end_at,
+        reason=data.reason or "Session cancelled",
+    ))
+    db.commit()
+    return SessionCancellationRead(start_at=data.start_at, end_at=end_at, affected=[
+        AffectedBooking(appointment_id=appointment.id, appointment_number=appointment.appointment_number,
+                        patient_name=name, phone=phone)
+        for appointment, _, name, phone in rows
+    ])

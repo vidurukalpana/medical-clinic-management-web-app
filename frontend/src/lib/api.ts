@@ -5,7 +5,16 @@ export type AppointmentStatus = "scheduled" | "completed" | "cancelled" | "no_sh
 export type VisitStatus = "waiting" | "in_progress" | "completed" | "cancelled";
 export type Gender = "female" | "male" | "other" | "not_specified";
 
-export interface Doctor {
+/** Public profile details shown to patients. */
+export interface DoctorProfile {
+  specialty: string | null;
+  qualifications: string | null;
+  languages: string | null;
+  bio: string | null;
+  /** In rupees, paid at the clinic. */
+  consultation_fee: number | null;
+}
+export interface Doctor extends DoctorProfile {
   id: number;
   user_id: number;
   display_name: string;
@@ -13,10 +22,16 @@ export interface Doctor {
   phone: string | null;
   is_active: boolean;
 }
-export interface PublicDoctor {
+export interface WeeklySession {
+  weekday: number;
+  start_time: string;
+  end_time: string;
+}
+export interface PublicDoctor extends DoctorProfile {
   id: number;
   display_name: string;
   registration_number: string;
+  weekly_sessions: WeeklySession[];
 }
 export interface User {
   id: number;
@@ -39,24 +54,68 @@ export interface Page<T> {
   offset: number;
   limit: number;
 }
-export interface Slot {
+export interface SessionTime {
   start_at: string;
   end_at: string;
 }
+/** A consulting session on one day; patients are seen in number order. */
+export interface BookingSession extends SessionTime {
+  max_patients: number;
+  remaining: number;
+  /** Places online booking may still take; the rest are kept for walk-ins and reception. */
+  remaining_online: number;
+}
 export interface BookingStatus {
-  remaining_slots: number;
+  remaining_places: number;
+  remaining_online_places: number;
   is_fully_booked: boolean;
 }
-export interface Appointment extends Slot {
+export interface Appointment extends SessionTime {
   id: number;
   doctor_id: number;
   patient_id: number;
+  appointment_number: number;
   status: AppointmentStatus;
+  /** Staff cancelled the whole session; the booking can be moved to another session. */
+  cancelled_by_clinic: boolean;
+  /** Shown to the patient as a QR code for reception. */
+  checkin_code: string;
 }
-export interface GuestBooking extends Slot {
+export interface GuestBooking extends SessionTime {
   id: number;
   doctor_id: number;
+  appointment_number: number;
   status: AppointmentStatus;
+  cancelled_by_clinic: boolean;
+  checkin_code: string;
+}
+export interface CheckInLookup extends SessionTime {
+  appointment_id: number;
+  appointment_number: number;
+  status: AppointmentStatus;
+  patient_name: string;
+  doctor_id: number;
+  doctor_name: string;
+  visit_id: number | null;
+  queue_number: number | null;
+  can_check_in: boolean;
+  /** Why the booking can't be checked in now, in words to tell the patient. */
+  problem: string | null;
+}
+export interface SmsMessage {
+  id: number;
+  appointment_id: number | null;
+  kind: "confirmation" | "reminder";
+  phone: string;
+  body: string;
+  /** "logged" = recorded with no SMS provider set up. */
+  status: "queued" | "sent" | "failed" | "logged";
+  error: string | null;
+  created_at: string;
+  sent_at: string | null;
+}
+export interface SessionCancellation extends SessionTime {
+  affected: { appointment_id: number; appointment_number: number; patient_name: string; phone: string }[];
 }
 export interface GuestBookingConfirmation extends GuestBooking {
   management_token: string;
@@ -88,9 +147,14 @@ export interface Visit {
   patient_id: number;
   visit_date: string;
   queue_number: number;
+  appointment_number: number | null;
   start_at: string | null;
   end_at: string | null;
   status: VisitStatus;
+  /** Recorded by the server when each step happens. */
+  checked_in_at: string | null;
+  consult_started_at: string | null;
+  consult_ended_at: string | null;
 }
 export interface DashboardAction {
   label: string;
@@ -108,13 +172,33 @@ export interface DashboardVisit extends Visit {
   patient_name: string;
   actions: DashboardAction[];
 }
+export interface QueueSession extends SessionTime {
+  doctor_arrived_at: string | null;
+  doctor_left_at: string | null;
+}
+export interface SessionAttendance {
+  start_at: string;
+  doctor_arrived_at: string;
+  doctor_left_at: string | null;
+}
+export interface SeenVisit {
+  id: number;
+  appointment_number: number | null;
+  patient_name: string;
+  consult_started_at: string | null;
+  consult_ended_at: string | null;
+}
 export interface DoctorQueue {
   doctor_id: number;
   doctor_name: string;
   is_active: boolean;
   waiting_count: number;
   in_progress_count: number;
+  /** The current or next session today. */
+  session: QueueSession | null;
   patients: DashboardVisit[];
+  /** Completed today, most recent first. */
+  seen: SeenVisit[];
 }
 export interface Dashboard {
   day: string;
@@ -138,7 +222,8 @@ export interface Availability {
   weekday: number;
   start_time: string;
   end_time: string;
-  slot_duration_minutes: number;
+  max_patients: number;
+  reserved_places: number;
   is_active: boolean;
 }
 export type AvailabilityInput = Omit<Availability, "id" | "doctor_id">;
@@ -150,6 +235,35 @@ export interface Unavailability {
   reason: string | null;
 }
 export type UnavailabilityInput = Omit<Unavailability, "id" | "doctor_id">;
+/** Public progress of one of today's sessions: numbers only, never patient details. */
+export interface LiveSession extends SessionTime {
+  doctor_id: number;
+  doctor_name: string;
+  status: "not_started" | "in_progress" | "ended" | "unavailable";
+  doctor_arrived_at: string | null;
+  doctor_left_at: string | null;
+  now_serving: number | null;
+  numbers_to_see: number[];
+}
+export interface LiveQueue {
+  day: string;
+  generated_at: string;
+  sessions: LiveSession[];
+}
+export interface ClinicContactDetails {
+  name: string;
+  address_lines: string[];
+  phone: string;
+  whatsapp: string | null;
+  email: string | null;
+  reception_hours: string;
+  closed_days: string | null;
+  emergency_number: string | null;
+}
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
 export interface DoctorProfileInput {
   display_name: string;
   registration_number: string;
@@ -264,14 +378,15 @@ export const api = {
   publicDoctors: () => request<PublicDoctor[]>("/doctors", { auth: false }),
   allDoctors: () => request<Doctor[]>("/admin/doctors"),
   myDoctorProfile: () => request<Doctor>("/doctors/me"),
-  updateMyDoctorProfile: (body: { display_name?: string; phone?: string | null }) =>
+  updateMyDoctorProfile: (body: { display_name?: string; phone?: string | null } & Partial<DoctorProfile>) =>
     request<Doctor>("/doctors/me", { method: "PATCH", body }),
   updateDoctor: (id: number, body: Partial<Omit<Doctor, "id" | "user_id">>) =>
     request<Doctor>(`/doctors/${id}`, { method: "PATCH", body }),
 
-  // Slots
-  availableSlots: (doctorId: number, day: string) =>
-    request<Slot[]>(`/doctors/${doctorId}/available-slots`, { query: { day }, auth: false }),
+  // Sessions
+  sessions: (doctorId: number, day: string) =>
+    request<BookingSession[]>(`/doctors/${doctorId}/sessions`, { query: { day }, auth: false }),
+  liveQueue: () => request<LiveQueue>("/live-queue", { auth: false }),
   bookingStatus: (doctorId: number, day: string) =>
     request<BookingStatus>(`/doctors/${doctorId}/booking-status`, { query: { day }, auth: false }),
 
@@ -293,6 +408,13 @@ export const api = {
       headers: { "X-Booking-Token": token },
       auth: false,
     }),
+
+  // Clinic
+  clinicContactDetails: () => request<ClinicContactDetails>("/clinic-contact-details", { auth: false }),
+
+  // Public chat assistant (answers questions only)
+  askChatbot: (messages: ChatMessage[]) =>
+    request<{ reply: string }>("/chatbot/messages", { method: "POST", body: { messages }, auth: false }),
 
   // Patient account
   myAppointments: () => request<GuestBooking[]>("/my/appointments"),
@@ -319,7 +441,12 @@ export const api = {
   rescheduleAppointment: (id: number, start_at: string) =>
     request<Appointment>(`/appointments/${id}/reschedule`, { method: "PUT", body: { start_at } }),
   noShowAppointment: (id: number) => request<Appointment>(`/appointments/${id}/no-show`, { method: "PUT" }),
+  checkInLookup: (code: string) => request<CheckInLookup>(`/check-in/${encodeURIComponent(code)}`),
   checkIn: (id: number) => request<Visit>(`/appointments/${id}/check-in`, { method: "POST", body: {} }),
+  markDoctorArrived: (doctorId: number, start_at: string) =>
+    request<SessionAttendance>(`/doctors/${doctorId}/sessions/arrive`, { method: "POST", body: { start_at } }),
+  markDoctorLeft: (doctorId: number, start_at: string) =>
+    request<SessionAttendance>(`/doctors/${doctorId}/sessions/leave`, { method: "POST", body: { start_at } }),
   walkIn: (doctor_id: number, patient_id: number) =>
     request<Visit>("/visits/walk-in", { method: "POST", body: { doctor_id, patient_id } }),
 
@@ -339,6 +466,8 @@ export const api = {
     request<Availability>(`/doctors/${doctorId}/availability/${id}`, { method: "PUT", body }),
   deleteAvailability: (doctorId: number, id: number) =>
     request<void>(`/doctors/${doctorId}/availability/${id}`, { method: "DELETE" }),
+  cancelSession: (doctorId: number, start_at: string, reason: string | null) =>
+    request<SessionCancellation>(`/doctors/${doctorId}/sessions/cancel`, { method: "POST", body: { start_at, reason } }),
   unavailability: (doctorId: number) => request<Unavailability[]>(`/doctors/${doctorId}/unavailability`),
   addUnavailability: (doctorId: number, body: UnavailabilityInput) =>
     request<Unavailability>(`/doctors/${doctorId}/unavailability`, { method: "POST", body }),
@@ -357,6 +486,8 @@ export const api = {
   }) => request<AuthUser>("/admin/users", { method: "POST", body }),
   updateUser: (id: number, body: { role?: Role; is_active?: boolean; doctor?: DoctorProfileInput }) =>
     request<AuthUser>(`/admin/users/${id}`, { method: "PATCH", body }),
+  smsOutbox: (offset = 0, limit = 50) =>
+    request<Page<SmsMessage> & { provider: string }>("/admin/sms", { query: { offset, limit } }),
   resetPassword: (id: number, new_password: string) =>
     request<void>(`/admin/users/${id}/password`, { method: "PUT", body: { new_password } }),
 };

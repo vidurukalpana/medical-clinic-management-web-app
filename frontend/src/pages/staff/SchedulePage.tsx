@@ -1,23 +1,15 @@
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Pencil, Trash2, CalendarOff, Clock3, Plane } from "lucide-react";
-import { api, type Availability, type AvailabilityInput } from "../../lib/api";
+import { Plus, Pencil, Trash2, CalendarOff, CalendarX2, Clock3, Phone, Plane } from "lucide-react";
+import { api, type Availability, type AvailabilityInput, type BookingSession, type SessionCancellation } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { useStaffDoctors } from "../../lib/hooks";
-import { formatClock, formatDateTime, isoToLocalInput, localInputToIso, weekdayName } from "../../lib/time";
+import { clinicDate, formatClock, formatDateTime, formatDay, formatTime, isoToLocalInput, localInputToIso, weekdayName } from "../../lib/time";
 import { Button, Card, EmptyState, ErrorNote, Field, Modal, PageHeader, Spinner } from "../../components/ui";
 import { useToast } from "../../components/Toast";
 import { DoctorSelect } from "./QuickActions";
 
 const WEEKDAYS = [0, 1, 2, 3, 4];
-
-function minutesBetween(start: string, end: string) {
-  const toMinutes = (value: string) => {
-    const [h, m] = value.split(":").map(Number);
-    return h * 60 + m;
-  };
-  return toMinutes(end) - toMinutes(start);
-}
 
 function AvailabilityModal({ doctorId, editing, defaultWeekday, onClose }: {
   doctorId: number;
@@ -33,24 +25,23 @@ function AvailabilityModal({ doctorId, editing, defaultWeekday, onClose }: {
           weekday: editing.weekday,
           start_time: editing.start_time.slice(0, 5),
           end_time: editing.end_time.slice(0, 5),
-          slot_duration_minutes: editing.slot_duration_minutes,
+          max_patients: editing.max_patients,
+          reserved_places: editing.reserved_places,
           is_active: editing.is_active,
         }
-      : { weekday: defaultWeekday, start_time: "09:00", end_time: "12:00", slot_duration_minutes: 10, is_active: true },
+      : { weekday: defaultWeekday, start_time: "09:00", end_time: "12:00", max_patients: 20, reserved_places: 0, is_active: true },
   );
   const mutation = useMutation({
     mutationFn: () =>
       editing ? api.replaceAvailability(doctorId, editing.id, form) : api.addAvailability(doctorId, form),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["availability", doctorId] });
-      queryClient.invalidateQueries({ queryKey: ["slots"] });
+      queryClient.invalidateQueries({ queryKey: ["sessions"] });
       queryClient.invalidateQueries({ queryKey: ["booking-status"] });
       toast(editing ? "Session updated" : "Session added");
       onClose();
     },
   });
-  const span = minutesBetween(form.start_time, form.end_time);
-  const slots = span > 0 ? Math.floor(span / form.slot_duration_minutes) : 0;
 
   return (
     <Modal open title={editing ? "Edit consulting session" : "Add consulting session"} onClose={onClose}>
@@ -94,17 +85,36 @@ function AvailabilityModal({ doctorId, editing, defaultWeekday, onClose }: {
             />
           </Field>
         </div>
-        <Field label="Minutes per patient" hint={slots > 0 ? `${slots} appointment slots in this session` : "End must be after start"}>
-          <input
-            className="input"
-            type="number"
-            min={5}
-            max={240}
-            value={form.slot_duration_minutes}
-            onChange={(event) => setForm({ ...form, slot_duration_minutes: Number(event.target.value) })}
-            required
-          />
-        </Field>
+        <div className="form-grid">
+          <Field
+            label="Patients per session"
+            hint={form.end_time > form.start_time ? "Seen in number order: 1, 2, 3…" : "End must be after start"}
+          >
+            <input
+              className="input"
+              type="number"
+              min={1}
+              max={200}
+              value={form.max_patients}
+              onChange={(event) => setForm({ ...form, max_patients: Number(event.target.value) })}
+              required
+            />
+          </Field>
+          <Field
+            label="Kept for walk-ins"
+            hint={`Online booking can take ${Math.max(form.max_patients - form.reserved_places, 0)} of ${form.max_patients}`}
+          >
+            <input
+              className="input"
+              type="number"
+              min={0}
+              max={form.max_patients}
+              value={form.reserved_places}
+              onChange={(event) => setForm({ ...form, reserved_places: Number(event.target.value) })}
+              required
+            />
+          </Field>
+        </div>
         <label className="check">
           <input
             type="checkbox"
@@ -127,6 +137,120 @@ function AvailabilityModal({ doctorId, editing, defaultWeekday, onClose }: {
   );
 }
 
+/** One-off cancellation: closes a session on a date and cancels its bookings so patients can move them. */
+function CancelSessionCard({ doctorId }: { doctorId: number }) {
+  const queryClient = useQueryClient();
+  const [day, setDay] = useState(clinicDate());
+  const [confirming, setConfirming] = useState<BookingSession | null>(null);
+  const [reason, setReason] = useState("");
+  const [result, setResult] = useState<SessionCancellation | null>(null);
+  const sessions = useQuery({
+    queryKey: ["sessions", doctorId, day],
+    queryFn: () => api.sessions(doctorId, day),
+    enabled: !!day,
+  });
+  const mutation = useMutation({
+    mutationFn: (session: BookingSession) => api.cancelSession(doctorId, session.start_at, reason.trim() || null),
+    onSuccess: (cancellation) => {
+      queryClient.invalidateQueries();
+      setConfirming(null);
+      setReason("");
+      setResult(cancellation);
+    },
+  });
+  const booked = (session: BookingSession) => session.max_patients - session.remaining;
+
+  return (
+    <Card title={<><CalendarX2 size={18} /> Cancel a session</>} className="mt">
+      <p className="muted small">
+        For a one-off change, such as the doctor being unwell. Booked patients see the cancellation and can move to
+        another date. Please call them too.
+      </p>
+      <div className="cancel-session">
+        <Field label="Date">
+          <input className="input" type="date" value={day} min={clinicDate()} onChange={(event) => setDay(event.target.value)} />
+        </Field>
+        <div className="cancel-session-list">
+          {sessions.isLoading ? (
+            <Spinner />
+          ) : sessions.isError ? (
+            <ErrorNote error={sessions.error} />
+          ) : !sessions.data?.length ? (
+            <p className="muted small">No open sessions on this date.</p>
+          ) : (
+            sessions.data.map((session) => (
+              <div key={session.start_at} className="cancel-session-item">
+                <span>
+                  <strong>
+                    {formatTime(session.start_at)} – {formatTime(session.end_at)}
+                  </strong>
+                  <span className="muted small"> · {booked(session)} booked</span>
+                </span>
+                <Button size="sm" variant="danger" onClick={() => setConfirming(session)}>
+                  Cancel session
+                </Button>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      {confirming && (
+        <Modal open title="Cancel this session?" onClose={() => setConfirming(null)}>
+          <div className="stack">
+            <p>
+              {formatDay(day)}, {formatTime(confirming.start_at)} – {formatTime(confirming.end_at)}.{" "}
+              {booked(confirming) > 0
+                ? `${booked(confirming)} booked patients will be cancelled and asked to choose another date.`
+                : "No one is booked yet."}
+            </p>
+            <Field label="Reason" hint="Optional, visible to staff only">
+              <input className="input" value={reason} maxLength={255} onChange={(event) => setReason(event.target.value)} placeholder="Doctor unwell…" />
+            </Field>
+            <ErrorNote error={mutation.error} />
+            <div className="modal-foot-inline">
+              <Button type="button" variant="ghost" onClick={() => setConfirming(null)}>
+                Keep session
+              </Button>
+              <Button variant="danger" loading={mutation.isPending} onClick={() => mutation.mutate(confirming)}>
+                Cancel session
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {result && (
+        <Modal open title="Session cancelled" onClose={() => setResult(null)}>
+          <div className="stack">
+            {result.affected.length === 0 ? (
+              <p>No one was booked, so there's no one to contact.</p>
+            ) : (
+              <>
+                <p>Please let these patients know. They can also move their booking online.</p>
+                <ul className="affected-list">
+                  {result.affected.map((item) => (
+                    <li key={item.appointment_id}>
+                      <span className="queue-num-sm">No. {item.appointment_number}</span>
+                      <strong>{item.patient_name}</strong>
+                      <a href={`tel:${item.phone.replace(/[^+0-9]/g, "")}`} className="muted">
+                        <Phone size={14} /> {item.phone}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+            <div className="modal-foot-inline">
+              <Button onClick={() => setResult(null)}>Done</Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </Card>
+  );
+}
+
 function TimeOffForm({ doctorId }: { doctorId: number }) {
   const toast = useToast();
   const queryClient = useQueryClient();
@@ -143,7 +267,7 @@ function TimeOffForm({ doctorId }: { doctorId: number }) {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["unavailability", doctorId] });
-      queryClient.invalidateQueries({ queryKey: ["slots"] });
+      queryClient.invalidateQueries({ queryKey: ["sessions"] });
       queryClient.invalidateQueries({ queryKey: ["booking-status"] });
       setReason("");
       toast("Time off added");
@@ -200,7 +324,7 @@ export function SchedulePage() {
     mutationFn: (id: number) => api.deleteAvailability(doctorId!, id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["availability", doctorId] });
-      queryClient.invalidateQueries({ queryKey: ["slots"] });
+      queryClient.invalidateQueries({ queryKey: ["sessions"] });
       toast("Session removed");
     },
     onError: (error) => toast((error as Error).message, "error"),
@@ -209,7 +333,7 @@ export function SchedulePage() {
     mutationFn: (id: number) => api.deleteUnavailability(doctorId!, id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["unavailability", doctorId] });
-      queryClient.invalidateQueries({ queryKey: ["slots"] });
+      queryClient.invalidateQueries({ queryKey: ["sessions"] });
       toast("Time off removed");
     },
     onError: (error) => toast((error as Error).message, "error"),
@@ -261,8 +385,8 @@ export function SchedulePage() {
                             {formatClock(session.start_time)} – {formatClock(session.end_time)}
                           </strong>
                           <span className="small">
-                            {session.slot_duration_minutes} min slots ·{" "}
-                            {Math.floor(minutesBetween(session.start_time, session.end_time) / session.slot_duration_minutes)} patients
+                            Up to {session.max_patients} patients
+                            {session.reserved_places > 0 && ` · ${session.reserved_places} kept for walk-ins`}
                           </span>
                           {!session.is_active && <span className="chip">Paused</span>}
                           <div className="session-tools">
@@ -285,6 +409,8 @@ export function SchedulePage() {
               </div>
             )}
           </Card>
+
+          <CancelSessionCard doctorId={doctorId} />
 
           <Card title={<><Plane size={18} /> Time off</>} className="mt">
             <TimeOffForm doctorId={doctorId} />

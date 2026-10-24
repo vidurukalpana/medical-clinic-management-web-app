@@ -5,12 +5,16 @@ import { BookPage } from "./pages/public/BookPage";
 import { ManagePage } from "./pages/public/ManagePage";
 import { LoginPage, RegisterPage } from "./pages/public/AuthPages";
 import { MyBookingsPage } from "./pages/public/MyBookingsPage";
+import { LivePage } from "./pages/public/LivePage";
+import { DoctorsPage as PublicDoctorsPage } from "./pages/public/DoctorsPage";
 import { DashboardPage } from "./pages/staff/DashboardPage";
 import { AppointmentsPage } from "./pages/staff/AppointmentsPage";
 import { PatientsPage } from "./pages/staff/PatientsPage";
 import { SchedulePage } from "./pages/staff/SchedulePage";
 import { DoctorsPage, UsersPage } from "./pages/staff/AdminPages";
 import { AccountPage } from "./pages/staff/AccountPage";
+import { CheckInPage } from "./pages/staff/CheckInPage";
+import { SmsOutboxPage } from "./pages/staff/SmsOutboxPage";
 import { useAuth } from "./lib/auth";
 import { EmptyState } from "./components/ui";
 
@@ -38,6 +42,8 @@ export default function App() {
       <Route element={<PublicLayout />}>
         <Route index element={<HomePage />} />
         <Route path="book" element={<BookPage />} />
+        <Route path="doctors" element={<PublicDoctorsPage />} />
+        <Route path="live" element={<LivePage />} />
         <Route path="manage" element={<ManagePage />} />
         <Route path="login" element={<LoginPage />} />
         <Route path="register" element={<RegisterPage />} />
@@ -49,9 +55,11 @@ export default function App() {
         <Route path="appointments" element={<AppointmentsPage />} />
         <Route path="patients" element={<PatientsPage />} />
         <Route path="schedule" element={<SchedulePage />} />
+        <Route path="check-in" element={<CheckInPage />} />
         <Route path="account" element={<AccountPage />} />
         <Route path="doctors" element={<AdminOnly><DoctorsPage /></AdminOnly>} />
         <Route path="users" element={<AdminOnly><UsersPage /></AdminOnly>} />
+        <Route path="sms" element={<AdminOnly><SmsOutboxPage /></AdminOnly>} />
       </Route>
     </Routes>
   );

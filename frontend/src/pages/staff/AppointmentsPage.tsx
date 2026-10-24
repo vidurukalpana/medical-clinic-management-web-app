@@ -32,6 +32,14 @@ function RowActions({ appointment, onReschedule }: { appointment: Appointment; o
     },
     onError: (error) => toast((error as Error).message, "error"),
   });
+  if (appointment.status === "cancelled" && appointment.cancelled_by_clinic)
+    return (
+      <div className="action-row">
+        <Button size="sm" variant="secondary" icon={<CalendarClock size={14} />} onClick={onReschedule}>
+          Move
+        </Button>
+      </div>
+    );
   if (appointment.status !== "scheduled") return null;
   const now = Date.now();
   const ended = new Date(appointment.end_at).getTime() <= now;
@@ -84,10 +92,10 @@ export function AppointmentsPage() {
 
   const reschedule = useMutation({
     mutationFn: (startAt: string) => api.rescheduleAppointment(moving!.id, startAt),
-    onSuccess: () => {
+    onSuccess: (result) => {
       setMoving(null);
       queryClient.invalidateQueries();
-      toast("Appointment moved");
+      toast(`Appointment moved. New number: ${result.appointment_number}`);
     },
     onError: (error) => toast((error as Error).message, "error"),
   });
@@ -164,8 +172,8 @@ export function AppointmentsPage() {
                     {items.map((appointment) => (
                       <tr key={appointment.id}>
                         <td className="nowrap">
-                          <strong>{formatTime(appointment.start_at)}</strong>
-                          <span className="muted small"> – {formatTime(appointment.end_at)}</span>
+                          <strong>No. {appointment.appointment_number}</strong>
+                          <span className="muted small"> · {formatTime(appointment.start_at)} session</span>
                         </td>
                         <td>
                           <PatientCell id={appointment.patient_id} />
@@ -173,6 +181,7 @@ export function AppointmentsPage() {
                         <td className="muted">{names.get(appointment.doctor_id) ?? `Doctor #${appointment.doctor_id}`}</td>
                         <td>
                           <StatusBadge status={appointment.status} />
+                          {appointment.cancelled_by_clinic && <span className="chip">Session cancelled</span>}
                         </td>
                         <td className="muted mono small">#{appointment.id}</td>
                         <td className="align-right">
@@ -191,11 +200,12 @@ export function AppointmentsPage() {
 
       {moving && (
         <RescheduleModal
+          allPlaces
           open
           doctorId={moving.doctor_id}
           onClose={() => setMoving(null)}
           busy={reschedule.isPending}
-          onConfirm={(slot) => reschedule.mutate(slot.start_at)}
+          onConfirm={(session) => reschedule.mutate(session.start_at)}
         />
       )}
       <BookAppointmentModal open={booking} onClose={() => setBooking(false)} />

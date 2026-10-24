@@ -37,6 +37,26 @@ class ForbiddenError(ApplicationError):
     """Raised when an authenticated user lacks permission."""
 
 
+class ServiceUnavailableError(ApplicationError):
+    """Raised when a dependent service cannot handle the request."""
+
+
+class ChatbotUnavailableError(ServiceUnavailableError):
+    """Raised when the chatbot's language model cannot answer."""
+
+    default_detail = "The chat assistant is unavailable right now. Please try again later."
+
+
+class TooManyRequestsError(ApplicationError):
+    """Raised when a client address sends too many requests to a limited endpoint."""
+
+    default_detail = "Too many requests. Please wait a moment and try again."
+
+    def __init__(self, retry_after: int) -> None:
+        self.retry_after = retry_after
+        super().__init__()
+
+
 class NotFoundError(ApplicationError):
     """Raised when a requested resource does not exist."""
 
@@ -67,6 +87,6 @@ class UnavailabilityOverlapError(ConflictError):
 
 
 class DoctorFullyBookedError(ConflictError):
-    """Raised when no consultation slots remain for a doctor."""
+    """Raised when no places remain in a doctor's sessions."""
 
-    default_detail = "Doctor is fully booked. No consultation slots remain today."
+    default_detail = "Doctor is fully booked. No places remain in today's sessions."

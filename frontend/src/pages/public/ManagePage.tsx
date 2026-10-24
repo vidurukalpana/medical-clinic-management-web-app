@@ -5,7 +5,7 @@ import { Search, KeyRound, Hash, CalendarClock, XCircle, Trash2, Bookmark, Calen
 import { api, type GuestBooking } from "../../lib/api";
 import { usePublicDoctors } from "../../lib/hooks";
 import { forgetBooking, loadSavedBookings, type SavedBooking } from "../../lib/savedBookings";
-import { BookingTicket, RescheduleModal, isUpcoming } from "../../components/BookingPieces";
+import { BookingTicket, MoveCancelledBooking, RescheduleModal, isUpcoming, needsNewDate } from "../../components/BookingPieces";
 import { Button, Card, ErrorNote, Field } from "../../components/ui";
 import { useToast } from "../../components/Toast";
 
@@ -34,7 +34,7 @@ export function ManagePage() {
     mutationFn: () => api.guestCancel(credentials!.id, credentials!.token),
     onSuccess: (result) => {
       setBooking(result);
-      queryClient.invalidateQueries({ queryKey: ["slots"] });
+      queryClient.invalidateQueries({ queryKey: ["sessions"] });
       toast("Your booking has been cancelled");
     },
     onError: (error) => toast((error as Error).message, "error"),
@@ -45,8 +45,8 @@ export function ManagePage() {
     onSuccess: (result) => {
       setBooking(result);
       setRescheduling(false);
-      queryClient.invalidateQueries({ queryKey: ["slots"] });
-      toast("Your booking has been moved");
+      queryClient.invalidateQueries({ queryKey: ["sessions"] });
+      toast(`Your booking has been moved. Your new number is ${result.appointment_number}.`);
     },
     onError: (error) => toast((error as Error).message, "error"),
   });
@@ -64,13 +64,13 @@ export function ManagePage() {
       <div className="page-intro">
         <span className="eyebrow">Manage booking</span>
         <h1>Find your appointment</h1>
-        <p className="muted">Enter the booking number and private code from your confirmation.</p>
+        <p className="muted">Enter your booking ID and private code.</p>
       </div>
 
       <div className="manage-layout">
         <Card>
           <form onSubmit={submit} className="stack">
-            <Field label="Booking number">
+            <Field label="Booking ID">
               <div className="input-icon">
                 <Hash size={16} />
                 <input
@@ -160,14 +160,21 @@ export function ManagePage() {
                         size="sm"
                         icon={<XCircle size={15} />}
                         loading={cancel.isPending}
-                        onClick={() => window.confirm("Cancel this booking? This frees the slot for others.") && cancel.mutate()}
+                        onClick={() => window.confirm("Cancel this booking? This frees your place for someone else.") && cancel.mutate()}
                       >
                         Cancel booking
                       </Button>
                     </>
+                  ) : needsNewDate(booking) ? (
+                    <MoveCancelledBooking
+                      booking={booking}
+                      busy={reschedule.isPending}
+                      onMove={(startAt) => reschedule.mutate(startAt)}
+                      onChooseDate={() => setRescheduling(true)}
+                    />
                   ) : booking.status === "cancelled" ? (
                     <Link to={`/book?doctor=${booking.doctor_id}`} className="btn btn-primary btn-sm">
-                      <CalendarPlus size={15} /> Book a new time
+                      <CalendarPlus size={15} /> Book again
                     </Link>
                   ) : null
                 }
@@ -176,18 +183,16 @@ export function ManagePage() {
                 open={rescheduling}
                 doctorId={booking.doctor_id}
                 onClose={() => setRescheduling(false)}
-                onConfirm={(slot) => reschedule.mutate(slot.start_at)}
+                onConfirm={(session) => reschedule.mutate(session.start_at)}
                 busy={reschedule.isPending}
+                allPlaces={needsNewDate(booking)}
               />
             </div>
           ) : (
             <div className="manage-placeholder">
               <KeyRound size={28} />
               <p>Your booking will appear here.</p>
-              <p className="muted small">
-                Lost your code? Call the clinic reception. For your privacy we can't recover it from a phone number
-                online.
-              </p>
+              <p className="muted small">Lost your code? Call reception.</p>
             </div>
           )}
         </div>

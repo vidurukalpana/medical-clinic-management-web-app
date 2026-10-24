@@ -55,6 +55,16 @@ export function addDays(day: string, amount: number): string {
   return date.toISOString().slice(0, 10);
 }
 
+/** Link to a session on the live queue page, highlighting the patient's own number. */
+export function liveQueueLink(booking: { doctor_id: number; start_at: string; appointment_number: number }): string {
+  const params = new URLSearchParams({
+    doctor: String(booking.doctor_id),
+    at: booking.start_at,
+    number: String(booking.appointment_number),
+  });
+  return `/live?${params}`;
+}
+
 /** Monday = 0 … Sunday = 6, as in Python's date.weekday(). */
 export function weekdayOf(day: string): number {
   return (new Date(`${day}T12:00:00Z`).getUTCDay() + 6) % 7;
@@ -92,6 +102,19 @@ export function formatClock(value: string): string {
   const [h, m] = value.split(":").map(Number);
   const suffix = h >= 12 ? "PM" : "AM";
   return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${suffix}`;
+}
+
+/** Whole minutes from `from` to `to` (default now), never negative. */
+export function minutesBetween(from: string, to: string | number = Date.now()): number {
+  const end = typeof to === "number" ? to : Date.parse(to);
+  return Math.max(0, Math.floor((end - Date.parse(from)) / 60_000));
+}
+
+/** 8 → "8 min", 65 → "1 h 5 min" */
+export function formatDuration(minutes: number): string {
+  if (minutes < 60) return `${minutes} min`;
+  const rest = minutes % 60;
+  return `${Math.floor(minutes / 60)} h${rest ? ` ${rest} min` : ""}`;
 }
 
 export function greeting(): string {

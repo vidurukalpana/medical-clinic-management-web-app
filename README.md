@@ -4,23 +4,25 @@ A FastAPI backend for public appointment booking and staff-managed clinic queues
 
 ## Scope and privacy
 
-- Public doctor profiles, available appointment slots and remaining capacity.
-- Guest booking with name and phone number only, alongside doctor and selected time.
+- Public doctor profiles, each day's consulting sessions and the places left in them.
+- Guest booking with name and phone number only, alongside doctor and selected session.
 - Private booking management using a random token; only its SHA-256 hash is stored.
 - Optional patient registration and login; patient accounts never grant staff access.
 - Staff login for patient registration, schedules, check-in, walk-ins and queue management.
+- A public chat assistant that answers questions about the clinic, doctors' hours and booking. It cannot book or change appointments and never sees patient records.
 - Doctors can access only their own appointments and queues; administrators can manage either doctor.
 - No prescription, diagnosis, symptom, consultation-note or treatment-plan fields in the booking/queue API or new database schema. Unknown clinical fields are rejected.
 
 Guest bookings create a minimal patient record with no required birth date, gender, address or emergency contact. Staff can still maintain optional demographic/contact information. Names and phone numbers are not treated as proof of identity, and guest submissions never attach themselves to an existing patient record by matching these values.
 
-**Phone verification is not implemented:** no SMS/email provider is configured. A booking management token proves possession of that token, not ownership of a phone number or a medical identity. Keep it private. Before public deployment, integrate contact verification and abuse protection/rate limiting at the API gateway or application layer. Use HTTPS and avoid logging authorization headers, booking tokens or request bodies.
+**Phone verification is not implemented:** no SMS/email provider is configured. A booking management token proves possession of that token, not ownership of a phone number or a medical identity. Keep it private. Before public deployment, integrate contact verification. Login, patient registration, guest booking, guest booking access and the chat assistant are rate limited per client address in the API process (`CLINIC_RATE_LIMIT_ENABLED`); behind a reverse proxy, set `CLINIC_TRUSTED_PROXY_IPS` to its address so each patient is counted separately. Use HTTPS and avoid logging authorization headers, booking tokens or request bodies.
 
 ## Technology
 
 - Python and FastAPI
 - SQLAlchemy for database access
 - PostgreSQL with the Psycopg driver
+- [Ollama](https://ollama.com/) running the `llama3.2:1b` model for the chat assistant (optional)
 
 A cloud deployment can be introduced later if the clinic needs to support remote access.
 
@@ -73,7 +75,7 @@ Copy the example configuration:
 cp .env.example .env
 ```
 
-Open `.env`, replace `change-this-password` in the PostgreSQL URL with the password used when creating `clinic_app`, and choose strong initial passwords for the administrator and both doctors. The `.env` file is ignored by Git because it contains database credentials and other secrets.
+Open `.env`, replace `change-this-password` in the PostgreSQL URL with the password used when creating `clinic_app`, and choose strong initial passwords for the administrator and both doctors. The `.env` file is ignored by Git because it contains database credentials and other secrets. The example sets `CLINIC_DEBUG=true` for local use; with debug off (the default, and the setting for production) the API refuses to start while an initial account password is an example value or shorter than 12 characters.
 
 ### 6. Create the tables and start the application
 
@@ -91,9 +93,29 @@ Open these addresses in a web browser:
 
 Press `Control+C` in Terminal to stop the application.
 
-### 7. Start the web app (optional)
+### 7. Start the chat assistant model (optional)
+
+The website chat assistant uses a local [Ollama](https://ollama.com/) model. Install Ollama, then download the model:
+
+```bash
+ollama pull llama3.2:1b
+```
+
+The Ollama desktop app keeps the server running at `http://127.0.0.1:11434`; otherwise run `ollama serve`. The rest of the application works without Ollama. Only chat questions fail, with HTTP 503.
+
+### 8. Start the web app (optional)
 
 With the backend running, open a second Terminal in the `frontend` folder and run `npm install` and then `npm run dev`. Then open http://localhost:5173. See [frontend/README.md](frontend/README.md) for details.
+
+### Load demo data (optional)
+
+For local development, add fictional doctors with specialties and weekly sessions, plus demo patients booked into the next few days:
+
+```bash
+python -m app.db.demo_data
+```
+
+It also fills in empty profile fields for the two startup doctors, creates each demo doctor account with its password from `CLINIC_DEMO_DOCTOR_PASSWORDS` in `.env`, and is safe to run again. Accounts that already exist keep their passwords. Demo patients use phone numbers starting `070 000 0`. Never run it against a real clinic database.
 
 ### Run with PyCharm
 
@@ -107,7 +129,7 @@ Confirm that PostgreSQL is running, then run:
 pytest
 ```
 
-Tests use `CLINIC_DATABASE_URL` and create a uniquely named temporary PostgreSQL schema. Only that temporary schema is removed after each test; the application's normal tables and clinic data are not changed.
+Tests use `CLINIC_DATABASE_URL` and create a uniquely named temporary PostgreSQL schema. Only that temporary schema is removed after each test; the application's normal tables and clinic data are not changed. Chatbot tests replace the language model with a fake, so Ollama doesn't need to be running.
 
 ## Authentication and doctor accounts
 
@@ -138,15 +160,15 @@ Logged-in users can change their password with `PUT /api/auth/password`. They mu
 - `PUT /api/auth/password` — change the logged-in user's password.
 - `PUT /api/admin/users/{user_id}/password` — let an administrator reset a user's password.
 - `GET /api/admin/doctors` — list all profiles, including inactive doctors and staff fields (administrator only).
-- `GET /api/doctors` — publicly list active doctors (name and registration number only).
+- `GET /api/doctors` — publicly list active doctors: name, registration number, `specialty`, `qualifications`, `languages`, `bio`, `consultation_fee` (rupees, paid at the clinic) and `weekly_sessions` (active weekday, start and end times). Phone numbers are never included.
 - `GET /api/doctors/me` — return the logged-in doctor's profile.
-- `PATCH /api/doctors/me` — let a doctor update their own profile.
+- `PATCH /api/doctors/me` — let a doctor update their own profile, including the public fields above. Blank text fields are cleared.
 - `GET /api/doctors/{doctor_id}` — publicly return one active doctor profile.
 - `PATCH /api/doctors/{doctor_id}` — let an administrator update a doctor profile.
 
 ## Staff doctor scheduling
 
-Availability records define a doctor's weekday, working period and appointment-slot duration. The default is 10 minutes per patient (12 slots in two hours, or 18 in three hours). A different duration can still be specified explicitly when managing a schedule. Weekdays use `0` for Monday through `4` for Friday. Unavailability records use `start_at` and `end_at`, so they can block part of a day, a full day or several days.
+Availability records define a doctor's weekly consulting sessions: weekday, start and end time, `max_patients` (1–200, default 20) and `reserved_places` (default 0), the places kept for walk-ins and reception. Online bookings (guest and patient-account bookings and their reschedules) can fill only `max_patients − reserved_places`. Staff bookings and walk-ins can use every place. There are no fixed times per patient. A booking takes a numbered place in a session and patients are seen in number order. Weekdays use `0` for Monday through `4` for Friday. Unavailability records use `start_at` and `end_at`, so they can block part of a day, a full day or several days.
 
 - `GET /api/doctors/{doctor_id}/availability` — list weekly availability.
 - `POST /api/doctors/{doctor_id}/availability` — add an availability period.
@@ -156,6 +178,9 @@ Availability records define a doctor's weekday, working period and appointment-s
 - `POST /api/doctors/{doctor_id}/unavailability` — add an unavailable period.
 - `PUT /api/doctors/{doctor_id}/unavailability/{unavailability_id}` — replace an unavailable period.
 - `DELETE /api/doctors/{doctor_id}/unavailability/{unavailability_id}` — remove an unavailable period.
+- `POST /api/doctors/{doctor_id}/sessions/cancel` with `{"start_at": "...session start...", "reason": "optional, staff only"}` — cancel one session on one date. It adds time off for the session, cancels its scheduled bookings and any waiting check-ins, and returns the affected patients' numbers, names and phone numbers for staff to contact. It is refused while a patient is with the doctor, or if the session has ended or is already closed.
+
+Bookings cancelled this way have `cancelled_by_clinic: true`. The patient, or staff, can move them to another session through the usual reschedule endpoint. This turns the booking back to `scheduled` with a new number, and places kept for walk-ins are open to it. Patients who had already checked in are rebooked by reception.
 
 ## Staff patient management
 
@@ -197,11 +222,12 @@ No login is required for these endpoints:
 | --- | --- |
 | `GET /api/doctors` | Browse active doctors |
 | `GET /api/doctors/{doctor_id}` | View public doctor details |
-| `GET /api/doctors/{doctor_id}/available-slots?day=2030-01-07` | Browse slots |
-| `GET /api/doctors/{doctor_id}/booking-status?day=2030-01-07` | Check remaining capacity |
-| `POST /api/guest/appointments` | Book using name, phone, doctor and time |
+| `GET /api/doctors/{doctor_id}/sessions?day=2030-01-07` | List the day's sessions with `max_patients`, `remaining` places and `remaining_online` places |
+| `GET /api/doctors/{doctor_id}/booking-status?day=2030-01-07` | Check `remaining_places` and `remaining_online_places` across the day |
+| `POST /api/guest/appointments` | Book using name, phone, doctor and session |
+| `GET /api/live-queue` | Today's sessions: status, the number being seen and the numbers still to be seen. Numbers only, no patient details |
 
-Example guest request (choose an actual available future slot):
+Example guest request. `start_at` is the start of a listed session that has places left:
 
 ```json
 {
@@ -212,15 +238,77 @@ Example guest request (choose an actual available future slot):
 }
 ```
 
-The response contains `id`, `doctor_id`, `start_at`, `end_at`, `status`, and a one-time-displayed `management_token`. Save the token securely. The API sends `Cache-Control: no-store`. It does not expose the patient ID, contact details or token hash.
+The response contains `id`, `doctor_id`, the session's `start_at` and `end_at`, the patient's `appointment_number`, `status`, and a one-time-displayed `management_token`. Save the token securely. The API sends `Cache-Control: no-store`. It does not expose the patient ID, contact details or token hash.
 
 Send the token in the `X-Booking-Token` header for:
 
 - `GET /api/guest/appointments/{appointment_id}`
 - `PUT /api/guest/appointments/{appointment_id}/cancel`
-- `PUT /api/guest/appointments/{appointment_id}/reschedule` with `{"start_at": "...timezone-aware datetime..."}`
+- `PUT /api/guest/appointments/{appointment_id}/reschedule` with `{"start_at": "...the new session's timezone-aware start..."}`
 
 Tokens are scoped to a single booking and expire 24 hours after its current end time. They cannot retrieve patient records or other bookings. Lost tokens require staff assistance; the API does not recover them using an unverified phone number.
+
+## Clinic contact details
+
+`GET /api/clinic-contact-details` needs no login. It returns the clinic's public contact details, which the website footer displays:
+
+```json
+{
+  "name": "CareFlow Clinic",
+  "address_lines": ["No. 42, Lake View Road", "Colombo 05, Sri Lanka"],
+  "phone": "+94 11 234 5678",
+  "whatsapp": "+94 77 123 4567",
+  "email": "hello@careflowclinic.lk",
+  "reception_hours": "Monday to Friday, 8:00 to 18:00",
+  "closed_days": "Closed on weekends and public holidays",
+  "emergency_number": "1990"
+}
+```
+
+The details are stored in [`app/content/clinic_contact.json`](app/content/clinic_contact.json), the single source for both the website and the chat assistant. The values shipped with the project are **mock details**. `whatsapp`, `email`, `closed_days` and `emergency_number` are optional (`null` or left out), and unknown fields are rejected. The file is read on each request, so edits apply without a restart.
+
+## Website chat assistant
+
+The public site has an **Ask a question** button that opens a chat assistant. It only answers questions. It cannot book, cancel or reschedule appointments, and it points people to the **Book a visit** and **Manage booking** pages instead.
+
+`POST /api/chatbot/messages` needs no login. Send the conversation so far, ending with the user's question:
+
+```json
+{
+  "messages": [
+    {"role": "user", "content": "When does Doctor One see patients?"}
+  ]
+}
+```
+
+The response is `{"reply": "..."}` with `Cache-Control: no-store`. Each message can be up to 1,000 characters, and a request can hold up to 20 messages. Only `user` and `assistant` roles are accepted, and unknown fields are rejected. If the model can't be reached, the API returns 503.
+
+What the assistant knows:
+
+- The clinic's contact details and reception hours from [`app/content/clinic_contact.json`](app/content/clinic_contact.json). The website footer shows the same details (see [Clinic contact details](#clinic-contact-details)).
+- The text in [`app/content/clinic_info.md`](app/content/clinic_info.md): directions, fees, services, facilities and how booking works. **The details in both content files are mock details for development.** Replace them with the clinic's real information before going live. Changes apply to the next question without a restart.
+- Active doctors' names, their weekly consultation hours, and their unavailable periods over the next 14 days. These are read from the database for every question. Unavailability reasons and registration numbers are left out.
+- Today's date in `CLINIC_TIMEZONE`.
+
+It never sees patient records, appointments, queues or booking codes. Conversations are not stored on the server; the browser keeps them only until the page is closed. The model is told to refuse medical advice and to direct emergencies to emergency services. A small model can still make mistakes, so the chat window says that answers may be wrong.
+
+Configure the model in `.env`:
+
+| Setting | Default | Purpose |
+| --- | --- | --- |
+| `CLINIC_CHATBOT_BASE_URL` | `http://127.0.0.1:11434` | Ollama server address |
+| `CLINIC_CHATBOT_MODEL` | `llama3.2:1b` | Ollama model name |
+| `CLINIC_CHATBOT_TIMEOUT_SECONDS` | `60` | Maximum time to wait for an answer |
+
+Each address can ask 15 questions a minute, because every question uses model compute.
+
+## Text messages to patients
+
+Patients get a text when they book or move a booking: the doctor, date, session start, their number and booking ID. On the day of the visit they get a reminder with their number and check-in code. Reminders go out at `CLINIC_SMS_REMINDER_HOUR` (default 7 AM) or `CLINIC_SMS_REMINDER_HOURS_BEFORE` (default 3) hours before the session, whichever is later. No reminder is sent if the booking was made or moved after that time, if the patient has checked in, or if the session starts within 30 minutes.
+
+Each message is written to the `sms_outbox` table in the same transaction as the booking. A background job in the API process runs every `CLINIC_SMS_WORKER_INTERVAL_SECONDS` (default 60). It queues due reminders, then hands queued messages to the provider. Rows are locked while sending, and reminders are unique per booking and session, so running several API processes never sends a message twice. Set `CLINIC_SMS_WORKER_ENABLED=false` to turn the job off.
+
+**No SMS provider is connected yet.** With the default `CLINIC_SMS_PROVIDER=outbox`, messages are recorded but not sent. Administrators can read them under **SMS outbox** in the staff portal, or through `GET /api/admin/sms`. To send for real, add a sender class for the chosen gateway in `app/services/sms.py` and select it with `CLINIC_SMS_PROVIDER`. Phone numbers are stored in `+94` form when they look like Sri Lankan numbers.
 
 ## Optional patient accounts
 
@@ -236,17 +324,26 @@ Patients can change their password and log out. They cannot use staff patient, s
 
 ## Staff appointments and queues
 
-`POST /api/appointments` accepts `doctor_id`, `patient_id`, and timezone-aware `start_at`. It requires an administrator or the assigned doctor. The same permissions apply to reading, cancelling and rescheduling through `/api/appointments/{appointment_id}`.
+`POST /api/appointments` accepts `doctor_id`, `patient_id`, and the timezone-aware `start_at` of a session. It requires an administrator or the assigned doctor. The same permissions apply to reading, cancelling and rescheduling through `/api/appointments/{appointment_id}`.
 
 - `POST /api/appointments/{appointment_id}/check-in` accepts `{}` on the clinic-local appointment date.
-- `POST /api/visits/walk-in` accepts `doctor_id` and `patient_id` and reserves the next available slot.
+- `GET /api/check-in/{code}` (staff only) finds a booking from its `checkin_code`, ignoring case, spaces and dashes. It returns the patient, doctor, number and session, `can_check_in`, and a `problem` such as "This booking is for Tuesday 08 January, not today." Doctors can look up only their own bookings.
+
+Every booking has a random 10-character `checkin_code`. Patients see it as a QR code on the booking confirmation and on their booking tickets. The QR links to `/staff/check-in?code=…`, so reception can scan it with a phone camera, a handheld scanner, or the computer camera from **Scan check-in** on the dashboard. The code is separate from the private management code. On its own it does nothing: the lookup requires a staff login.
+- `POST /api/visits/walk-in` accepts `doctor_id` and `patient_id` and gives the patient the next free number in today's earliest open session.
 - `GET /api/doctors/{doctor_id}/queue` returns the assigned doctor's queue; optional `day` defaults to the clinic-local date.
 - `GET /api/visits/{visit_id}` returns an authorized visit.
 - `PATCH /api/visits/{visit_id}` accepts only `status`.
+- `POST /api/doctors/{doctor_id}/sessions/arrive` with `{"start_at": "...today's session start..."}` records when the doctor arrived for that session. The first time recorded is kept. Starting the first patient also records it if no one did.
+- `POST /api/doctors/{doctor_id}/sessions/leave` with the same body records when the doctor left. It needs a recorded arrival and is refused while a patient is with the doctor. The first time recorded is kept. Until the doctor leaves, the dashboard keeps showing the session even past its scheduled end. The live queue shows the session as running late while patients are still waiting, for up to 2 hours past the end, and as ended once the doctor leaves.
+
+The server records times when each step happens, and they cannot be set through the API. A visit gets `checked_in_at` when the patient joins the queue, `consult_started_at` when it moves to `in_progress`, and `consult_ended_at` when it is completed or cancelled from `in_progress`. The dashboard shows, for each doctor, today's current or next session with `doctor_arrived_at`, and a `seen` list of today's completed visits with their times. The live queue shows `doctor_arrived_at` and `doctor_left_at` as well.
 
 Visits move from `waiting` to `in_progress` to `completed`. Waiting or in-progress visits may be cancelled. Completed/cancelled visits cannot be edited. Completing or cancelling a visit also updates its appointment. Checked-in bookings must be managed through the staff visit workflow.
 
-Database row locks serialize booking and queue allocation per doctor. Conflicting bookings return 409, and failed guest bookings do not leave orphan patient records. Cancelled reservations release capacity.
+Each booking gets the lowest number not held in its session, so a cancelled number is given to the next booking. Rescheduling into another session gives a new number; rescheduling into the same session keeps it. Time off that overlaps any part of a session closes the whole session. Queues are ordered by session and then by appointment number, not by arrival. A visit's `queue_number` records check-in order; `appointment_number` is the number the patient was given.
+
+Database row locks serialize booking and queue allocation per doctor. Bookings for a full session return 409, and failed guest bookings do not leave orphan patient records. Cancelled reservations release capacity.
 
 ## Existing database upgrade
 
@@ -256,7 +353,7 @@ New installations create the revised schema automatically. Existing installation
 python -m app.db.initialize
 ```
 
-This adds guest-token/account ownership columns and makes birth date optional. It also moves older schemas to the current columns: each legacy `doctor_unavailability.unavailable_date` becomes a whole clinic-local day in `start_at`/`end_at`, and the legacy patient `sex` column is copied into `gender`. The command is safe to run repeatedly. It preserves existing rows, keeps the legacy columns (no longer required), and does not delete legacy clinical data.
+This adds guest-token/account ownership columns and makes birth date optional. It also moves older schemas to the current columns: each legacy `doctor_unavailability.unavailable_date` becomes a whole clinic-local day in `start_at`/`end_at`, and the legacy patient `sex` column is copied into `gender`. Sessions that used fixed-length slots get `max_patients` equal to their old slot count, and every session gets `reserved_places` 0. Upcoming slot bookings move to the start and end of their session and are numbered in their old time order. Past and cancelled bookings keep their times. The command is safe to run repeatedly. It preserves existing rows, keeps the legacy columns (no longer required), and does not delete legacy clinical data.
 
 To permanently remove the old clinical columns and their contents after the clinic has authorized their deletion, run:
 
@@ -303,6 +400,11 @@ erDiagram
         string display_name
         string registration_number UK
         string phone
+        string specialty
+        string qualifications
+        string languages
+        string bio
+        int consultation_fee
         boolean is_active
     }
 
@@ -323,7 +425,8 @@ erDiagram
         int weekday
         time start_time
         time end_time
-        int slot_duration_minutes
+        int max_patients
+        int reserved_places
         boolean is_active
     }
 
@@ -341,6 +444,8 @@ erDiagram
         int patient_id FK
         datetime start_at
         datetime end_at
+        int appointment_number
+        string checkin_code UK
         string guest_token_hash
         int booked_by_user_id FK
         string status
@@ -368,6 +473,6 @@ All routes below require a staff bearer token. Doctors can browse and update onl
 - `GET /api/admin/users/{user_id}`: reads an account and its optional doctor profile.
 - `PATCH /api/admin/users/{user_id}`: changes `role` and/or `is_active`. Assigning the doctor role to an account without a profile requires the nested `doctor` object described above. Existing profiles are retained for appointment/visit history, disabled when the account leaves the doctor role, and reactivated when it returns. Edit existing profile details through the doctor endpoints. Role/activity changes revoke existing sessions; reactivation requires a fresh login. The last active administrator cannot be demoted or disabled, including through concurrent requests. Startup seeding preserves account administration changes.
 
-Schedule edits now reject conflicts with HTTP 409. Removing, disabling, moving, or shortening a weekly period cannot strand an ongoing or future scheduled booking previously covered by it. Adding or moving an unavailable period cannot overlap such bookings. Resolve the bookings first through rescheduling, cancellation, or visit management. Changing slot duration keeps existing reservation times when they still fit within working hours. Schedule mutations share the doctor's booking lock, so a concurrent booking and conflicting schedule edit cannot both succeed. Historical and terminal bookings do not prevent schedule edits.
+Schedule edits now reject conflicts with HTTP 409. A session with ongoing or future scheduled bookings cannot be removed, disabled, moved to another weekday or start time, or limited below the highest number already booked. Changing only its end time or raising its limit is allowed, and the session's bookings take the new end time. Adding or moving an unavailable period cannot overlap such bookings. Resolve the bookings first through rescheduling, cancellation, or visit management. Schedule mutations share the doctor's booking lock, so a concurrent booking and conflicting schedule edit cannot both succeed. Historical and terminal bookings do not prevent schedule edits.
 
 These additions use the existing database schema and need no database migration.

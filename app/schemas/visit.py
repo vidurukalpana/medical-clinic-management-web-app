@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.schemas.appointment import AppointmentRead
 
@@ -44,9 +44,13 @@ class VisitRead(BaseModel):
     patient_id: int
     visit_date: date
     queue_number: int
+    appointment_number: int | None
     start_at: datetime | None
     end_at: datetime | None
     status: VisitStatus
+    checked_in_at: datetime | None
+    consult_started_at: datetime | None
+    consult_ended_at: datetime | None
 
 
 class DashboardAction(BaseModel):
@@ -68,13 +72,33 @@ class DashboardVisit(VisitRead):
     actions: list[DashboardAction] = Field(default_factory=list)
 
 
+class QueueSession(BaseModel):
+    """The doctor's current or next session today."""
+
+    start_at: datetime
+    end_at: datetime
+    doctor_arrived_at: datetime | None
+    doctor_left_at: datetime | None
+
+
+class SeenVisit(BaseModel):
+    id: int
+    appointment_number: int | None
+    patient_name: str
+    consult_started_at: datetime | None
+    consult_ended_at: datetime | None
+
+
 class DoctorQueue(BaseModel):
     doctor_id: int
     doctor_name: str
     is_active: bool
     waiting_count: int
     in_progress_count: int
+    session: QueueSession | None
     patients: list[DashboardVisit]
+    # Completed today, most recent first.
+    seen: list[SeenVisit]
 
 
 class DashboardSummary(BaseModel):
@@ -94,3 +118,35 @@ class DashboardRead(BaseModel):
     summary: DashboardSummary
     appointments: list[DashboardAppointment]
     doctor_queues: list[DoctorQueue]
+
+
+class LiveSession(BaseModel):
+    """Public progress of one session: numbers only, never patient details."""
+
+    doctor_id: int
+    doctor_name: str
+    start_at: datetime
+    end_at: datetime
+    status: Literal["not_started", "in_progress", "ended", "unavailable"]
+    doctor_arrived_at: datetime | None
+    doctor_left_at: datetime | None
+    now_serving: int | None
+    numbers_to_see: list[int]
+
+
+class LiveQueueRead(BaseModel):
+    day: date
+    generated_at: datetime
+    sessions: list[LiveSession]
+
+
+class SessionArrive(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    start_at: AwareDatetime
+
+
+class SessionArrivalRead(BaseModel):
+    start_at: datetime
+    doctor_arrived_at: datetime
+    doctor_left_at: datetime | None

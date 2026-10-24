@@ -28,7 +28,7 @@ def availability_payload(**changes: object) -> dict[str, object]:
         "weekday": 0,
         "start_time": "09:00:00",
         "end_time": "13:00:00",
-        "slot_duration_minutes": 15,
+        "max_patients": 20,
         "is_active": True,
     }
     payload.update(changes)
@@ -76,7 +76,7 @@ def test_doctor_can_manage_own_availability(
         json=availability_payload(
             start_time="10:00:00",
             end_time="14:00:00",
-            slot_duration_minutes=30,
+            max_patients=30,
         ),
     )
     list_response = client.get(base_url, headers=headers)
@@ -85,7 +85,7 @@ def test_doctor_can_manage_own_availability(
     assert monday_response.status_code == 201
     assert replacement_response.status_code == 200
     assert replacement_response.json()["id"] == monday_id
-    assert replacement_response.json()["slot_duration_minutes"] == 30
+    assert replacement_response.json()["max_patients"] == 30
     assert [item["weekday"] for item in list_response.json()] == [0, 4]
 
     overlap_response = client.post(
@@ -116,14 +116,20 @@ def test_availability_validation_rejects_weekends_and_invalid_periods(
         headers=headers,
         json=availability_payload(start_time="13:00:00", end_time="09:00:00"),
     )
-    duration_too_long = client.post(
+    no_patients = client.post(
         base_url,
         headers=headers,
-        json=availability_payload(
-            start_time="09:00:00",
-            end_time="09:30:00",
-            slot_duration_minutes=60,
-        ),
+        json=availability_payload(max_patients=0),
+    )
+    too_many_patients = client.post(
+        base_url,
+        headers=headers,
+        json=availability_payload(max_patients=201),
+    )
+    reserving_too_many = client.post(
+        base_url,
+        headers=headers,
+        json=availability_payload(max_patients=10, reserved_places=11),
     )
     weekend = client.post(
         base_url,
@@ -132,7 +138,9 @@ def test_availability_validation_rejects_weekends_and_invalid_periods(
     )
 
     assert reversed_hours.status_code == 422
-    assert duration_too_long.status_code == 422
+    assert no_patients.status_code == 422
+    assert too_many_patients.status_code == 422
+    assert reserving_too_many.status_code == 422
     assert weekend.status_code == 422
 
 
@@ -274,16 +282,16 @@ def test_scheduling_resources_return_not_found(
     assert missing_unavailability.status_code == 404
 
 
-def test_default_ten_minute_slots(client, test_settings):
+def test_default_session_limit(client, test_settings):
     headers, _ = login(client, test_settings.admin_username,
                        configured_password(test_settings.admin_password))
     payload = availability_payload(end_time="11:00:00")
-    del payload["slot_duration_minutes"]
+    del payload["max_patients"]
     response = client.post("/api/doctors/1/availability", headers=headers, json=payload)
     assert response.status_code == 201
-    assert response.json()["slot_duration_minutes"] == 10
+    assert (response.json()["max_patients"], response.json()["reserved_places"]) == (20, 0)
     from datetime import date, timedelta
     day = date.today() + timedelta(days=7)
     day += timedelta(days=-day.weekday())
-    slots = client.get(f"/api/doctors/1/available-slots?day={day}", headers=headers)
-    assert len(slots.json()) == 12
+    sessions = client.get(f"/api/doctors/1/sessions?day={day}", headers=headers).json()
+    assert [(s["max_patients"], s["remaining"], s["remaining_online"]) for s in sessions] == [(20, 20, 20)]

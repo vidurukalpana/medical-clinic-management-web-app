@@ -14,17 +14,21 @@ import {
   CalendarDays,
   Clock,
   Download,
+  Search,
 } from "lucide-react";
-import { api, type GuestBookingConfirmation, type PublicDoctor, type Slot } from "../../lib/api";
+import { api, type BookingSession, type GuestBookingConfirmation, type PublicDoctor } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { usePublicDoctors } from "../../lib/hooks";
+import { describeWeek, matchesSearch } from "../../lib/doctors";
 import { saveBooking } from "../../lib/savedBookings";
-import { clinicDate, formatDay, formatTime } from "../../lib/time";
-import { SlotPicker } from "../../components/SlotPicker";
+import { clinicDate, formatDay, formatTime, liveQueueLink } from "../../lib/time";
+import { SessionPicker } from "../../components/SessionPicker";
+import { CheckInQr } from "../../components/CheckInQr";
+import { formatCheckinCode } from "../../lib/checkin";
 import { Avatar, Button, EmptyState, ErrorNote, Field, Spinner } from "../../components/ui";
 import { useToast } from "../../components/Toast";
 
-const STEPS = ["Doctor", "Date & time", "Your details"];
+const STEPS = ["Doctor", "Date", "Your details"];
 const PHONE_PATTERN = /^\+?[0-9][0-9 ()-]{5,28}[0-9]$/;
 
 function Stepper({ step }: { step: number }) {
@@ -51,17 +55,18 @@ export function BookPage() {
   const [doctorId, setDoctorId] = useState<number | null>(preselected);
   const [step, setStep] = useState(preselected ? 1 : 0);
   const [day, setDay] = useState<string | null>(null);
-  const [slot, setSlot] = useState<Slot | null>(null);
+  const [session, setSession] = useState<BookingSession | null>(null);
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [remember, setRemember] = useState(false);
   const [confirmation, setConfirmation] = useState<GuestBookingConfirmation | null>(null);
+  const [doctorQuery, setDoctorQuery] = useState("");
 
   const doctor = doctors.data?.find((item) => item.id === doctorId) ?? null;
 
   const book = useMutation({
     mutationFn: () =>
-      api.bookAsGuest({ doctor_id: doctorId!, start_at: slot!.start_at, full_name: fullName.trim(), phone: phone.trim() }),
+      api.bookAsGuest({ doctor_id: doctorId!, start_at: session!.start_at, full_name: fullName.trim(), phone: phone.trim() }),
     onSuccess: (result) => {
       setConfirmation(result);
       if (remember) {
@@ -71,17 +76,18 @@ export function BookPage() {
           label: `${doctor?.display_name ?? "Doctor"} · ${formatDay(clinicDate(new Date(result.start_at)), "short")}`,
         });
       }
-      queryClient.invalidateQueries({ queryKey: ["slots"] });
+      queryClient.invalidateQueries({ queryKey: ["sessions"] });
       queryClient.invalidateQueries({ queryKey: ["booking-status"] });
       queryClient.invalidateQueries({ queryKey: ["my-appointments"] });
     },
     onError: (error) => {
-      // A 409 means someone else took the slot; send the user back to choose again.
+      // A 409 means the session filled up meanwhile; send the user back to choose again.
       if ((error as { status?: number }).status === 409) {
-        setSlot(null);
+        setSession(null);
         setStep(1);
-        queryClient.invalidateQueries({ queryKey: ["slots"] });
-        toast("That time was just taken. Please pick another slot.", "error");
+        queryClient.invalidateQueries({ queryKey: ["sessions"] });
+        queryClient.invalidateQueries({ queryKey: ["booking-status"] });
+        toast("That session just filled up. Please pick another date.", "error");
       }
     },
   });
@@ -112,14 +118,30 @@ export function BookPage() {
                 <EmptyState title="No doctors are available for booking" />
               ) : (
                 <div className="choice-list">
-                  {doctors.data.map((item, index) => (
+                  {doctors.data.length > 4 && (
+                    <div className="input-icon">
+                      <Search size={16} />
+                      <input
+                        className="input"
+                        type="search"
+                        value={doctorQuery}
+                        placeholder="Search by name or specialty"
+                        aria-label="Search doctors"
+                        onChange={(event) => setDoctorQuery(event.target.value)}
+                      />
+                    </div>
+                  )}
+                  {doctors.data.filter((item) => matchesSearch(item, doctorQuery)).length === 0 && (
+                    <EmptyState title="No doctors match" hint="Try another name or specialty." />
+                  )}
+                  {doctors.data.map((item, index) => !matchesSearch(item, doctorQuery) ? null : (
                     <button
                       type="button"
                       key={item.id}
                       className={`choice ${doctorId === item.id ? "is-selected" : ""}`}
                       onClick={() => {
                         setDoctorId(item.id);
-                        setSlot(null);
+                        setSession(null);
                         setDay(null);
                         setStep(1);
                       }}
@@ -127,7 +149,10 @@ export function BookPage() {
                       <Avatar name={item.display_name} size={48} tone={index % 6} />
                       <span className="choice-text">
                         <strong>{item.display_name}</strong>
-                        <span className="muted mono">Reg. {item.registration_number}</span>
+                        <span className="doctor-specialty">{item.specialty ?? "Doctor"}</span>
+                        {item.weekly_sessions.length > 0 && (
+                          <span className="muted small">{describeWeek(item.weekly_sessions)}</span>
+                        )}
                       </span>
                       <ArrowRight size={18} className="choice-arrow" />
                     </button>
@@ -139,22 +164,22 @@ export function BookPage() {
 
           {step === 1 && doctorId && (
             <div className="fade-in">
-              <h2 className="step-title">When works for you?</h2>
-              <SlotPicker
+              <h2 className="step-title">Which day suits you?</h2>
+              <SessionPicker
                 doctorId={doctorId}
                 day={day}
                 onDayChange={(next) => {
                   setDay(next);
-                  setSlot(null);
+                  setSession(null);
                 }}
-                value={slot?.start_at ?? null}
-                onChange={setSlot}
+                value={session?.start_at ?? null}
+                onChange={setSession}
               />
               <div className="step-nav">
                 <Button variant="ghost" icon={<ArrowLeft size={16} />} onClick={() => setStep(0)}>
                   Change doctor
                 </Button>
-                <Button disabled={!slot} onClick={() => setStep(2)}>
+                <Button disabled={!session} onClick={() => setStep(2)}>
                   Continue <ArrowRight size={16} />
                 </Button>
               </div>
@@ -170,10 +195,7 @@ export function BookPage() {
               }}
             >
               <h2 className="step-title">Just two details</h2>
-              <p className="muted">
-                We only need these to call your name at the clinic. Please don't include symptoms or medical
-                information.
-              </p>
+              <p className="muted">Please don't include medical details.</p>
               <div className="form-grid">
                 <Field label="Full name">
                   <div className="input-icon">
@@ -209,9 +231,7 @@ export function BookPage() {
               </div>
               <label className="check">
                 <input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} />
-                <span>
-                  Remember this booking on this device <span className="muted">(stores your private code in this browser)</span>
-                </span>
+                <span>Remember on this device</span>
               </label>
               {user?.role === "patient" && (
                 <div className="alert alert-info">
@@ -237,13 +257,9 @@ export function BookPage() {
           <SummaryRow icon={<CalendarDays size={16} />} label="Date" value={day ? formatDay(day) : undefined} />
           <SummaryRow
             icon={<Clock size={16} />}
-            label="Time"
-            value={slot ? `${formatTime(slot.start_at)} – ${formatTime(slot.end_at)}` : undefined}
+            label="Session"
+            value={session ? `${formatTime(session.start_at)} – ${formatTime(session.end_at)}` : undefined}
           />
-          <div className="summary-note">
-            <KeyRound size={16} />
-            <span>You'll get a private code to manage this booking. No account needed.</span>
-          </div>
         </aside>
       </div>
     </div>
@@ -284,9 +300,11 @@ function Confirmation({ booking, doctor, remembered }: {
   const download = () => {
     const text = [
       "CareFlow Clinic booking",
-      `Booking number: ${booking.id}`,
+      `Booking ID: ${booking.id}`,
+      `Your number: ${booking.appointment_number}`,
       `Doctor: ${doctor?.display_name ?? booking.doctor_id}`,
-      `When: ${formatDay(day)} at ${formatTime(booking.start_at)}`,
+      `When: ${formatDay(day)}, session starts ${formatTime(booking.start_at)}`,
+      `Check-in code (show at reception): ${formatCheckinCode(booking.checkin_code)}`,
       `Private code: ${booking.management_token}`,
       "",
       "Keep this code private. It lets anyone view, move or cancel this booking.",
@@ -305,19 +323,26 @@ function Confirmation({ booking, doctor, remembered }: {
         </div>
         <h1>You're booked!</h1>
         <p className="lead">
-          {doctor?.display_name} · <b>{formatDay(day)}</b> at <b>{formatTime(booking.start_at)}</b>
+          {doctor?.display_name} · <b>{formatDay(day)}</b>
         </p>
 
         <div className="confirm-grid">
+          <div className="confirm-stat confirm-stat-number">
+            <small>Your number</small>
+            <strong>{booking.appointment_number}</strong>
+          </div>
           <div className="confirm-stat">
-            <small>Booking number</small>
+            <small>Session starts</small>
+            <strong>{formatTime(booking.start_at)}</strong>
+          </div>
+          <div className="confirm-stat">
+            <small>Booking ID</small>
             <strong className="mono">#{booking.id}</strong>
           </div>
-          <div className="confirm-stat">
-            <small>Arrive by</small>
-            <strong>{formatTime(new Date(new Date(booking.start_at).getTime() - 10 * 60_000).toISOString())}</strong>
-          </div>
         </div>
+        <p className="muted small">Patients are seen in number order. Please arrive a little before the session starts.</p>
+
+        <CheckInQr code={booking.checkin_code} />
 
         <div className="token-box">
           <div className="token-head">
@@ -334,10 +359,7 @@ function Confirmation({ booking, doctor, remembered }: {
             </Button>
           </div>
           <p className="muted small">
-            {remembered
-              ? "Saved in this browser too. "
-              : "Keep this code safe. The clinic can't recover it from your phone number. "}
-            Anyone with the code can view, move or cancel this booking.
+            {remembered ? "Saved on this device." : "Keep this code safe. It can't be recovered."}
           </p>
         </div>
 
@@ -345,6 +367,11 @@ function Confirmation({ booking, doctor, remembered }: {
           <Link to={`/manage?id=${booking.id}`} className="btn btn-primary">
             Manage this booking
           </Link>
+          {day === clinicDate() && (
+            <Link to={liveQueueLink(booking)} className="btn btn-secondary">
+              See live queue
+            </Link>
+          )}
           <Link to="/" className="btn btn-ghost">
             Back to home
           </Link>

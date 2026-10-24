@@ -29,8 +29,12 @@ class Availability(Base):
             name="ck_availability_time_order",
         ),
         CheckConstraint(
-            "slot_duration_minutes BETWEEN 5 AND 240",
-            name="ck_availability_slot_duration",
+            "max_patients BETWEEN 1 AND 200",
+            name="ck_availability_max_patients",
+        ),
+        CheckConstraint(
+            "reserved_places BETWEEN 0 AND max_patients",
+            name="ck_availability_reserved_places",
         ),
     )
 
@@ -41,7 +45,10 @@ class Availability(Base):
     weekday: Mapped[int] = mapped_column(Integer)
     start_time: Mapped[time] = mapped_column(Time)
     end_time: Mapped[time] = mapped_column(Time)
-    slot_duration_minutes: Mapped[int] = mapped_column(Integer, default=10, server_default="10")
+    # Patients are seen in number order, so a session has a limit rather than fixed times.
+    max_patients: Mapped[int] = mapped_column(Integer, default=20, server_default="20")
+    # Places online booking cannot take, kept for walk-ins and reception bookings.
+    reserved_places: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     doctor: Mapped[Doctor] = relationship(back_populates="availability")

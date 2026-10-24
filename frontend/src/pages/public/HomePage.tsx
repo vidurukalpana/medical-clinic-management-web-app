@@ -1,22 +1,26 @@
 import { Link } from "react-router-dom";
 import {
+  CalendarDays,
   CalendarPlus,
+  CalendarX,
   ShieldCheck,
-  Timer,
-  UserRoundCheck,
   ArrowRight,
   KeyRound,
-  Sparkles,
-  BadgeCheck,
   Stethoscope,
+  HeartPulse,
 } from "lucide-react";
-import { usePublicDoctors } from "../../lib/hooks";
+import type { PublicDoctor } from "../../lib/api";
+import { useNextAvailable, usePublicDoctors } from "../../lib/hooks";
+import { addDays, clinicDate, formatDay, formatTime } from "../../lib/time";
 import { Avatar, EmptyState, ErrorNote, Spinner } from "../../components/ui";
+import { DoctorCard } from "../../components/DoctorCard";
+
+const HOME_DOCTORS = 3;
 
 const STEPS = [
-  { icon: Stethoscope, title: "Choose your doctor", text: "See who's consulting and how many slots remain each day." },
-  { icon: Timer, title: "Pick a time that suits you", text: "Live availability, so you never book a slot that's already taken." },
-  { icon: KeyRound, title: "Keep your private code", text: "Use it to check, move or cancel your visit. You don't need an account." },
+  { icon: Stethoscope, title: "Choose a doctor", text: "Search by name or specialty." },
+  { icon: CalendarDays, title: "Pick a day", text: "You'll get your number right away." },
+  { icon: KeyRound, title: "Keep your code", text: "Change or cancel anytime." },
 ];
 
 export function HomePage() {
@@ -29,17 +33,14 @@ export function HomePage() {
         <div className="container hero-inner">
           <div className="hero-copy">
             <span className="eyebrow">
-              <Sparkles size={14} /> Same-week appointments available
+              <HeartPulse size={14} /> Care, right on time
             </span>
             <h1>
               Skip the waiting room.
               <br />
               <span className="gradient-text">See your doctor on time.</span>
             </h1>
-            <p className="lead">
-              Book a consultation in under a minute with just your name and phone number. Arrive at your slot and
-              we'll take it from there.
-            </p>
+            <p className="lead">Book in under a minute. We'll be ready when you arrive.</p>
             <div className="hero-cta">
               <Link to="/book" className="btn btn-accent btn-lg">
                 <CalendarPlus size={18} /> Book an appointment
@@ -48,67 +49,16 @@ export function HomePage() {
                 Manage a booking
               </Link>
             </div>
-            <ul className="hero-trust">
-              <li>
-                <UserRoundCheck size={16} /> No account needed
-              </li>
-              <li>
-                <ShieldCheck size={16} /> No medical details online
-              </li>
-              <li>
-                <BadgeCheck size={16} /> Registered doctors
-              </li>
-            </ul>
           </div>
 
-          <div className="hero-visual" aria-hidden>
-            <div className="float-card float-card-main">
-              <div className="fc-head">
-                <span className="fc-pill">Confirmed</span>
-                <span className="muted mono">#1042</span>
-              </div>
-              <div className="fc-doc">
-                <Avatar name="Doctor One" size={44} tone={0} />
-                <div>
-                  <strong>Doctor One</strong>
-                  <span className="muted">General consultation</span>
-                </div>
-              </div>
-              <div className="fc-when">
-                <div>
-                  <small>Date</small>
-                  <strong>Tue, 14 Oct</strong>
-                </div>
-                <div>
-                  <small>Time</small>
-                  <strong>9:20 AM</strong>
-                </div>
-              </div>
-              <div className="fc-slots">
-                {["9:00", "9:10", "9:20", "9:30", "9:40", "9:50"].map((time, index) => (
-                  <span key={time} className={index === 2 ? "on" : index === 0 || index === 4 ? "off" : ""}>
-                    {time}
-                  </span>
-                ))}
-              </div>
-            </div>
-            <div className="float-card float-card-queue">
-              <small>Now serving</small>
-              <strong className="queue-num">07</strong>
-              <span className="muted">3 patients ahead</span>
-            </div>
-            <div className="float-card float-card-mini">
-              <ShieldCheck size={18} />
-              <span>Private booking code</span>
-            </div>
-          </div>
+          <HeroVisual doctors={doctors.data} />
         </div>
       </section>
 
       <section className="container section">
         <div className="section-head">
           <span className="eyebrow">How it works</span>
-          <h2>Three steps, no paperwork</h2>
+          <h2>Three simple steps</h2>
         </div>
         <div className="steps">
           {STEPS.map(({ icon: Icon, title, text }, index) => (
@@ -130,8 +80,9 @@ export function HomePage() {
             <span className="eyebrow">Our doctors</span>
             <h2>Consulting this week</h2>
           </div>
-          <Link to="/book" className="link-arrow">
-            See all availability <ArrowRight size={16} />
+          <Link to="/doctors" className="link-arrow">
+            {doctors.data && doctors.data.length > HOME_DOCTORS ? `See all ${doctors.data.length} doctors` : "Find a doctor"}{" "}
+            <ArrowRight size={16} />
           </Link>
         </div>
         {doctors.isLoading ? (
@@ -142,17 +93,8 @@ export function HomePage() {
           <EmptyState title="No doctors are taking bookings right now" hint="Please check back soon." />
         ) : (
           <div className="doctor-grid">
-            {doctors.data.map((doctor, index) => (
-              <article key={doctor.id} className="doctor-card">
-                <Avatar name={doctor.display_name} size={64} tone={index % 6} />
-                <div>
-                  <h3>{doctor.display_name}</h3>
-                  <span className="muted mono">Reg. {doctor.registration_number}</span>
-                </div>
-                <Link to={`/book?doctor=${doctor.id}`} className="btn btn-primary btn-sm">
-                  Book with {doctor.display_name.split(" ")[0]} <ArrowRight size={15} />
-                </Link>
-              </article>
+            {doctors.data.slice(0, HOME_DOCTORS).map((doctor, index) => (
+              <DoctorCard key={doctor.id} doctor={doctor} tone={index % 6} />
             ))}
           </div>
         )}
@@ -162,7 +104,7 @@ export function HomePage() {
         <div className="cta-band">
           <div>
             <h2>Already booked?</h2>
-            <p>Use your booking number and private code to check, move or cancel your visit.</p>
+            <p>Check, move or cancel your visit.</p>
           </div>
           <Link to="/manage" className="btn btn-lg btn-light">
             Manage my booking <ArrowRight size={18} />
@@ -170,5 +112,71 @@ export function HomePage() {
         </div>
       </section>
     </>
+  );
+}
+
+function dayLabel(day: string) {
+  const today = clinicDate();
+  if (day === today) return "Today";
+  if (day === addDays(today, 1)) return "Tomorrow";
+  return formatDay(day, "short");
+}
+
+/** Live preview of the soonest session with places left; never shows patient data. */
+function HeroVisual({ doctors }: { doctors: PublicDoctor[] | undefined }) {
+  const next = useNextAvailable(doctors);
+  const found = next.data;
+
+  return (
+    <div className="hero-visual" aria-hidden>
+      <div className="float-card float-card-main">
+        {found ? (
+          <>
+            <div className="fc-head">
+              <span className="fc-pill">Next available</span>
+              <span className="muted mono">Reg. {found.doctor.registration_number}</span>
+            </div>
+            <div className="fc-doc">
+              <Avatar name={found.doctor.display_name} size={44} tone={found.doctorIndex % 6} />
+              <div>
+                <strong>{found.doctor.display_name}</strong>
+                <span className="muted">{found.doctor.specialty ?? "Registered doctor"}</span>
+              </div>
+            </div>
+            <div className="fc-when">
+              <div>
+                <small>Date</small>
+                <strong>{dayLabel(found.day)}</strong>
+              </div>
+              <div>
+                <small>Starts</small>
+                <strong>{formatTime(found.session.start_at)}</strong>
+              </div>
+            </div>
+          </>
+        ) : next.isPending || !doctors ? (
+          <div className="fc-empty">
+            <Spinner label="Finding the next open session…" />
+          </div>
+        ) : (
+          <div className="fc-empty">
+            <CalendarX size={28} />
+            <strong>{next.isError ? "See open sessions on the booking page" : "Fully booked this week"}</strong>
+            {!next.isError && <span className="muted">Please check back soon.</span>}
+          </div>
+        )}
+      </div>
+      {found && (
+        <div className="float-card float-card-queue">
+          <small>{dayLabel(found.day)}</small>
+          <strong className="queue-num">{String(found.session.remaining_online).padStart(2, "0")}</strong>
+          <span className="muted">{found.session.remaining_online === 1 ? "place left" : "places left"}</span>
+        </div>
+      )}
+      <div className="float-card float-card-mini">
+        <ShieldCheck size={18} />
+        <span>Private booking code</span>
+      </div>
+    </div>
   );
 }

@@ -1,27 +1,22 @@
 from datetime import datetime, time
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class AvailabilityCreate(BaseModel):
     weekday: int = Field(ge=0, le=4)
     start_time: time
     end_time: time
-    slot_duration_minutes: int = Field(default=10, ge=5, le=240)
+    max_patients: int = Field(default=20, ge=1, le=200)
+    reserved_places: int = Field(default=0, ge=0, le=200)
     is_active: bool = True
 
     @model_validator(mode="after")
     def validate_working_period(self) -> "AvailabilityCreate":
-        start_seconds = _time_in_seconds(self.start_time)
-        end_seconds = _time_in_seconds(self.end_time)
-        if start_seconds >= end_seconds:
+        if _time_in_seconds(self.start_time) >= _time_in_seconds(self.end_time):
             raise ValueError("start_time must be earlier than end_time.")
-
-        working_minutes = (end_seconds - start_seconds) / 60
-        if self.slot_duration_minutes > working_minutes:
-            raise ValueError(
-                "slot_duration_minutes must fit within the availability period."
-            )
+        if self.reserved_places > self.max_patients:
+            raise ValueError("reserved_places cannot be more than max_patients.")
         return self
 
 
@@ -33,7 +28,8 @@ class AvailabilityRead(BaseModel):
     weekday: int
     start_time: time
     end_time: time
-    slot_duration_minutes: int
+    max_patients: int
+    reserved_places: int
     is_active: bool
 
 
@@ -66,6 +62,28 @@ class DoctorUnavailabilityRead(BaseModel):
     start_at: datetime
     end_at: datetime
     reason: str | None
+
+
+class SessionCancel(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    start_at: AwareDatetime
+    reason: str | None = Field(default=None, max_length=255)
+
+
+class AffectedBooking(BaseModel):
+    """A patient staff should contact; returned only to staff."""
+
+    appointment_id: int
+    appointment_number: int
+    patient_name: str
+    phone: str
+
+
+class SessionCancellationRead(BaseModel):
+    start_at: datetime
+    end_at: datetime
+    affected: list[AffectedBooking]
 
 
 def _time_in_seconds(value: time) -> int:

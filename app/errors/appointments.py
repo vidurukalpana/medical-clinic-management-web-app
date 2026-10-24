@@ -12,8 +12,8 @@ def save_appointment(db: Session) -> None:
     except IntegrityError as error:
         db.rollback()
         constraint = getattr(getattr(error.orig, "diag", None), "constraint_name", None)
-        if constraint == "uq_appointment_doctor_start":
-            raise ConflictError("The selected appointment slot is already booked.") from error
+        if constraint == "uq_appointment_session_number":
+            raise ConflictError("That number was just taken. Please try again.") from error
         raise
     except SQLAlchemyError:
         db.rollback()

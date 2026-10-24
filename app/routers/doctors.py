@@ -7,7 +7,7 @@ from app.dependencies import (
 )
 from app.schemas.doctor import DoctorAdminUpdate, DoctorRead, DoctorSelfUpdate, DoctorPublicRead
 from app.errors import NotFoundError
-from app.services.doctors import get_doctor, list_doctors, update_doctor
+from app.services.doctors import get_doctor, list_doctors, public_profile, update_doctor
 
 router = APIRouter(prefix="/doctors", tags=["doctors"])
 
@@ -20,8 +20,7 @@ router = APIRouter(prefix="/doctors", tags=["doctors"])
 def read_doctors(
     db: DatabaseSession,
 ) -> list[DoctorPublicRead]:
-    doctors = list_doctors(db)
-    return [DoctorPublicRead.model_validate(doctor) for doctor in doctors]
+    return [public_profile(doctor) for doctor in list_doctors(db)]
 
 
 @router.get(
@@ -52,7 +51,7 @@ def read_doctor(doctor_id: int, db: DatabaseSession) -> DoctorPublicRead:
     doctor = get_doctor(db, doctor_id)
     if not doctor.is_active or not doctor.user.is_active:
         raise NotFoundError("Doctor")
-    return DoctorPublicRead.model_validate(doctor)
+    return public_profile(doctor)
 
 
 @router.patch(

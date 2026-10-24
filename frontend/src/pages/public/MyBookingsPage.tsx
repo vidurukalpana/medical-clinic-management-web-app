@@ -5,7 +5,7 @@ import { CalendarPlus, CalendarClock, XCircle, History, KeyRound } from "lucide-
 import { api, type GuestBooking } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { usePublicDoctors } from "../../lib/hooks";
-import { BookingTicket, RescheduleModal, isUpcoming } from "../../components/BookingPieces";
+import { BookingTicket, MoveCancelledBooking, RescheduleModal, isUpcoming, needsNewDate } from "../../components/BookingPieces";
 import { Button, EmptyState, ErrorNote, Spinner } from "../../components/ui";
 import { useToast } from "../../components/Toast";
 import { ChangePasswordCard } from "../staff/AccountPage";
@@ -26,7 +26,7 @@ export function MyBookingsPage() {
 
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ["my-appointments"] });
-    queryClient.invalidateQueries({ queryKey: ["slots"] });
+    queryClient.invalidateQueries({ queryKey: ["sessions"] });
   };
   const cancel = useMutation({
     mutationFn: (id: number) => api.myCancel(id),
@@ -38,10 +38,10 @@ export function MyBookingsPage() {
   });
   const reschedule = useMutation({
     mutationFn: ({ id, startAt }: { id: number; startAt: string }) => api.myReschedule(id, startAt),
-    onSuccess: () => {
+    onSuccess: (result) => {
       setMoving(null);
       refresh();
-      toast("Booking moved");
+      toast(`Booking moved. Your new number is ${result.appointment_number}.`);
     },
     onError: (error) => toast((error as Error).message, "error"),
   });
@@ -51,8 +51,9 @@ export function MyBookingsPage() {
   if (user.role !== "patient") return <Navigate to="/staff" replace />;
 
   const names = new Map(doctors.data?.map((doctor) => [doctor.id, doctor.display_name]));
+  const toMove = (bookings.data ?? []).filter(needsNewDate);
   const upcoming = (bookings.data ?? []).filter(isUpcoming).reverse();
-  const past = (bookings.data ?? []).filter((booking) => !isUpcoming(booking));
+  const past = (bookings.data ?? []).filter((booking) => !isUpcoming(booking) && !needsNewDate(booking));
 
   return (
     <div className="container narrow-page">
@@ -60,7 +61,6 @@ export function MyBookingsPage() {
         <div>
           <span className="eyebrow">Hi, {user.username}</span>
           <h1>My bookings</h1>
-          <p className="muted">Bookings you made while signed in. Earlier guest bookings aren't linked automatically.</p>
         </div>
         <div className="row">
           <Button variant="ghost" icon={<KeyRound size={16} />} onClick={() => setShowPassword((v) => !v)}>
@@ -90,6 +90,28 @@ export function MyBookingsPage() {
         />
       ) : (
         <>
+          {toMove.length > 0 && (
+            <>
+              <h2 className="list-title">Needs a new date</h2>
+              <div className="ticket-list">
+                {toMove.map((booking) => (
+                  <BookingTicket
+                    key={booking.id}
+                    booking={booking}
+                    doctorName={names.get(booking.doctor_id)}
+                    actions={
+                      <MoveCancelledBooking
+                        booking={booking}
+                        busy={reschedule.isPending && reschedule.variables?.id === booking.id}
+                        onMove={(startAt) => reschedule.mutate({ id: booking.id, startAt })}
+                        onChooseDate={() => setMoving(booking)}
+                      />
+                    }
+                  />
+                ))}
+              </div>
+            </>
+          )}
           <h2 className="list-title">Upcoming</h2>
           {upcoming.length ? (
             <div className="ticket-list">
@@ -146,7 +168,8 @@ export function MyBookingsPage() {
           doctorId={moving.doctor_id}
           onClose={() => setMoving(null)}
           busy={reschedule.isPending}
-          onConfirm={(slot) => reschedule.mutate({ id: moving.id, startAt: slot.start_at })}
+          allPlaces={needsNewDate(moving)}
+          onConfirm={(session) => reschedule.mutate({ id: moving.id, startAt: session.start_at })}
         />
       )}
     </div>

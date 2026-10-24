@@ -99,7 +99,9 @@ function PatientDetail({ patient, onClose }: { patient: Patient; onClose: () => 
               <ul className="mini-list">
                 {recent.map((appointment) => (
                   <li key={appointment.id}>
-                    <span>{formatDateTime(appointment.start_at)}</span>
+                    <span>
+                      {formatDateTime(appointment.start_at)} · No. {appointment.appointment_number}
+                    </span>
                     <span className="muted">{names.get(appointment.doctor_id) ?? `Doctor #${appointment.doctor_id}`}</span>
                     <StatusBadge status={appointment.status} />
                   </li>

@@ -11,12 +11,13 @@ from app.errors import AuthenticationRequiredError, ForbiddenError
 from app.errors.appointments import save_appointment
 from app.models import Appointment, Doctor, User, UserRole
 from app.schemas.appointment import (
-    AppointmentPage, AppointmentCreate, AppointmentRead, AppointmentReschedule, AvailableSlot, BookingStatus,
+    AppointmentPage, AppointmentCreate, AppointmentRead, AppointmentReschedule, BookingSession, BookingStatus,
     GuestBookingConfirmation, GuestBookingCreate, GuestBookingRead,
 )
 from app.schemas.patient import PatientCreate
-from app.services import appointments
+from app.services import appointments, sms
 from app.services.patients import create_patient
+from app.services.rate_limit import GUEST_ACCESS_LIMIT, GUEST_BOOKING_LIMIT
 from app.services.security import create_session_token, hash_session_token
 
 router = APIRouter(tags=["appointments"])
@@ -42,13 +43,24 @@ def managed_appointment(
 ManagedAppointment = Annotated[tuple[Doctor, Appointment], Depends(managed_appointment)]
 
 
-@router.get("/doctors/{doctor_id}/available-slots", response_model=list[AvailableSlot])
-def read_available_slots(
+def reschedule_and_confirm(
+    db: DatabaseSession, doctor: Doctor, appointment: Appointment, start_at: datetime,
+    clinic_timezone: str, *, online: bool = False,
+) -> None:
+    """Move the booking and, if it really moved, queue a confirmation text with the new details."""
+    before = (appointment.start_at, appointment.status)
+    appointments.reschedule_appointment(db, doctor, appointment, start_at, clinic_timezone, online=online)
+    if (appointment.start_at, appointment.status) != before:
+        sms.queue_confirmation(db, appointment, clinic_timezone)
+
+
+@router.get("/doctors/{doctor_id}/sessions", response_model=list[BookingSession])
+def read_booking_sessions(
     doctor_id: int, day: Annotated[date, Query()],
     db: DatabaseSession, settings: AppSettings,
-) -> list[AvailableSlot]:
+) -> list[BookingSession]:
     doctor = appointments.get_booking_doctor(db, doctor_id)
-    return appointments.available_slots(db, doctor, day, settings.timezone)
+    return appointments.booking_sessions(db, doctor, day, settings.timezone)
 
 
 @router.post("/appointments", response_model=AppointmentRead, status_code=status.HTTP_201_CREATED)
@@ -60,6 +72,7 @@ def add_appointment(
     require_booking_manager(doctor, user)
     appointment = appointments.create_appointment(db, doctor, data, settings.timezone)
     appointment.booked_by_user_id = user.id
+    sms.queue_confirmation(db, appointment, settings.timezone)
     save_appointment(db)
     return AppointmentRead.model_validate(appointment)
 
@@ -101,7 +114,7 @@ def move_appointment(
     db: DatabaseSession, settings: AppSettings,
 ) -> AppointmentRead:
     doctor, appointment = managed
-    appointments.reschedule_appointment(db, doctor, appointment, data.start_at, settings.timezone)
+    reschedule_and_confirm(db, doctor, appointment, data.start_at, settings.timezone)
     save_appointment(db)
     return AppointmentRead.model_validate(appointment)
 
@@ -122,25 +135,32 @@ def read_booking_status(
     db: DatabaseSession, settings: AppSettings,
 ) -> BookingStatus:
     doctor = appointments.get_booking_doctor(db, doctor_id)
-    slots = appointments.available_slots(db, doctor, day, settings.timezone)
-    return BookingStatus(remaining_slots=len(slots), is_fully_booked=not slots)
+    sessions = appointments.booking_sessions(db, doctor, day, settings.timezone)
+    remaining = sum(session.remaining for session in sessions)
+    return BookingStatus(
+        remaining_places=remaining,
+        remaining_online_places=sum(session.remaining_online for session in sessions),
+        is_fully_booked=not remaining,
+    )
 
 
-@router.post("/guest/appointments", response_model=GuestBookingConfirmation, status_code=201)
+@router.post("/guest/appointments", response_model=GuestBookingConfirmation, status_code=201,
+             dependencies=[GUEST_BOOKING_LIMIT])
 def book_as_guest(
     data: GuestBookingCreate, db: DatabaseSession, settings: AppSettings,
     response: Response, user: OptionalUser,
 ) -> GuestBookingConfirmation:
     doctor = appointments.get_booking_doctor(db, data.doctor_id, lock=True)
-    appointments.select_slot(db, doctor, data.start_at, settings.timezone)
+    appointments.select_session(db, doctor, data.start_at, settings.timezone, online=True)
     # Never link an unverified guest to an existing patient by name or phone.
     patient = create_patient(db, PatientCreate(full_name=data.full_name, phone=data.phone), commit=False)
     appointment = appointments.create_appointment(db, doctor, AppointmentCreate(
         doctor_id=doctor.id, patient_id=patient.id, start_at=data.start_at,
-    ), settings.timezone)
+    ), settings.timezone, online=True)
     token = create_session_token()
     appointment.booked_by_user_id = user.id if user is not None else None
     appointment.guest_token_hash = hash_session_token(token)
+    sms.queue_confirmation(db, appointment, settings.timezone)
     save_appointment(db)
     response.headers["Cache-Control"] = "no-store"
     return GuestBookingConfirmation(
@@ -169,25 +189,28 @@ def guest_appointment(
 GuestAppointment = Annotated[tuple[Doctor, Appointment], Depends(guest_appointment)]
 
 
-@router.get("/guest/appointments/{appointment_id}", response_model=GuestBookingRead)
+@router.get("/guest/appointments/{appointment_id}", response_model=GuestBookingRead,
+            dependencies=[GUEST_ACCESS_LIMIT])
 def read_guest_booking(managed: GuestAppointment) -> GuestBookingRead:
     return GuestBookingRead.model_validate(managed[1])
 
 
-@router.put("/guest/appointments/{appointment_id}/cancel", response_model=GuestBookingRead)
+@router.put("/guest/appointments/{appointment_id}/cancel", response_model=GuestBookingRead,
+            dependencies=[GUEST_ACCESS_LIMIT])
 def cancel_guest_booking(managed: GuestAppointment, db: DatabaseSession) -> GuestBookingRead:
     appointments.cancel_appointment(db, managed[1])
     save_appointment(db)
     return GuestBookingRead.model_validate(managed[1])
 
 
-@router.put("/guest/appointments/{appointment_id}/reschedule", response_model=GuestBookingRead)
+@router.put("/guest/appointments/{appointment_id}/reschedule", response_model=GuestBookingRead,
+            dependencies=[GUEST_ACCESS_LIMIT])
 def move_guest_booking(
     data: AppointmentReschedule, managed: GuestAppointment,
     db: DatabaseSession, settings: AppSettings,
 ) -> GuestBookingRead:
     doctor, appointment = managed
-    appointments.reschedule_appointment(db, doctor, appointment, data.start_at, settings.timezone)
+    reschedule_and_confirm(db, doctor, appointment, data.start_at, settings.timezone, online=True)
     save_appointment(db)
     return GuestBookingRead.model_validate(appointment)
 
@@ -230,6 +253,6 @@ def move_owned_booking(
     db: DatabaseSession, settings: AppSettings,
 ) -> GuestBookingRead:
     doctor, appointment = managed
-    appointments.reschedule_appointment(db, doctor, appointment, data.start_at, settings.timezone)
+    reschedule_and_confirm(db, doctor, appointment, data.start_at, settings.timezone, online=True)
     save_appointment(db)
     return GuestBookingRead.model_validate(appointment)
