@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     doctor_one_password: SecretStr | None = None
     doctor_two_username: str = "doctor2"
     doctor_two_password: SecretStr | None = None
+    # Used only by the demo data script, as JSON: {"demo.ayesha": "password", ...}.
+    demo_doctor_passwords: dict[str, SecretStr] = {}
 
     chatbot_base_url: str = "http://127.0.0.1:11434"
     chatbot_model: str = "llama3.2:1b"

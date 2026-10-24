@@ -115,7 +115,7 @@ For local development, add fictional doctors with specialties and weekly session
 python -m app.db.demo_data
 ```
 
-It also fills in empty profile fields for the two startup doctors, prints a random password for each new demo doctor account, and is safe to run again. Demo patients use phone numbers starting `070 000 0`. Never run it against a real clinic database.
+It also fills in empty profile fields for the two startup doctors, creates each demo doctor account with its password from `CLINIC_DEMO_DOCTOR_PASSWORDS` in `.env`, and is safe to run again. Accounts that already exist keep their passwords. Demo patients use phone numbers starting `070 000 0`. Never run it against a real clinic database.
 
 ### Run with PyCharm
 
