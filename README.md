@@ -75,7 +75,7 @@ Copy the example configuration:
 cp .env.example .env
 ```
 
-Open `.env`, replace `change-this-password` in the PostgreSQL URL with the password used when creating `clinic_app`, and choose strong initial passwords for the administrator and both doctors. The `.env` file is ignored by Git because it contains database credentials and other secrets.
+Open `.env`, replace `change-this-password` in the PostgreSQL URL with the password used when creating `clinic_app`, and choose strong initial passwords for the administrator and both doctors. The `.env` file is ignored by Git because it contains database credentials and other secrets. The example sets `CLINIC_DEBUG=true` for local use; with debug off (the default, and the setting for production) the API refuses to start while an initial account password is an example value or shorter than 12 characters.
 
 ### 6. Create the tables and start the application
 
