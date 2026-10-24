@@ -8,6 +8,7 @@ from app.models import User, UserRole
 from app.errors import ConflictError
 from app.schemas.auth import PatientRegistration
 from app.services.auth import normalize_username
+from app.services.rate_limit import LOGIN_LIMIT, REGISTRATION_LIMIT
 from app.services.security import hash_password
 
 from app.core.config import Settings, get_settings
@@ -34,6 +35,7 @@ AppSettings = Annotated[Settings, Depends(get_settings)]
     response_model=LoginResponse,
     summary="Log in with a username and password",
     responses={401: {"description": "Incorrect username or password"}},
+    dependencies=[LOGIN_LIMIT],
 )
 def login(
     credentials: LoginRequest,
@@ -95,7 +97,8 @@ def change_password(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.post("/register-patient", response_model=AuthenticatedUserRead, status_code=201)
+@router.post("/register-patient", response_model=AuthenticatedUserRead, status_code=201,
+             dependencies=[REGISTRATION_LIMIT])
 def register_patient_account(data: PatientRegistration, db: DatabaseSession) -> AuthenticatedUserRead:
     user = User(username=normalize_username(data.username),
                 password_hash=hash_password(data.password), role=UserRole.PATIENT)

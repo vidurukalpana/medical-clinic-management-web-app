@@ -505,14 +505,14 @@ def test_demo_data_is_repeatable(client, test_settings):
     dependency = client.app.dependency_overrides[get_db]()
     db = next(dependency)
     try:
-        accounts = seed_demo_data(db, test_settings.timezone)
-        assert [username for username, _ in accounts] == [demo.username for demo in DEMO_DOCTORS]
+        passwords = {demo.username: f"{demo.username}-password" for demo in DEMO_DOCTORS}
+        assert seed_demo_data(db, test_settings.timezone, passwords) == [demo.username for demo in DEMO_DOCTORS]
         counts = (db.query(Patient).count(), db.query(Appointment).count())
-        assert seed_demo_data(db, test_settings.timezone) == []
+        assert seed_demo_data(db, test_settings.timezone, passwords) == []
         assert (db.query(Patient).count(), db.query(Appointment).count()) == counts
     finally:
         dependency.close()
     doctors = client.get("/api/doctors").json()
     assert len(doctors) == 2 + len(DEMO_DOCTORS)
     assert all(doctor["specialty"] for doctor in doctors)
-    login(client, DEMO_DOCTORS[0].username, accounts[0][1])
+    login(client, DEMO_DOCTORS[0].username, passwords[DEMO_DOCTORS[0].username])

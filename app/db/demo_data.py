@@ -1,13 +1,14 @@
 """Fictional demo doctors, sessions, patients and bookings for local development.
 
 Run with `python -m app.db.demo_data`. It is safe to run repeatedly: records that
-already exist are left as they are. Never run it against a real clinic database.
+already exist are left as they are. Demo doctor passwords come from
+CLINIC_DEMO_DOCTOR_PASSWORDS. Never run it against a real clinic database.
 """
 
 import random
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
-from secrets import token_urlsafe
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
@@ -90,10 +91,10 @@ DEMO_PATIENTS = (
 )
 
 
-def seed_demo_data(db: Session, clinic_timezone: str) -> list[tuple[str, str]]:
-    """Add the demo records; returns (username, password) for each new doctor account."""
+def seed_demo_data(db: Session, clinic_timezone: str, passwords: Mapping[str, str]) -> list[str]:
+    """Add the demo records; returns the username of each new doctor account."""
     _fill_seeded_profiles(db)
-    accounts = _create_demo_doctors(db)
+    accounts = _create_demo_doctors(db, passwords)
     db.commit()
     if db.scalar(select(Patient.id).where(Patient.phone.startswith(DEMO_PHONE_PREFIX))) is None:
         patients = [
@@ -115,14 +116,18 @@ def _fill_seeded_profiles(db: Session) -> None:
                 setattr(doctor, field, getattr(profile, field))
 
 
-def _create_demo_doctors(db: Session) -> list[tuple[str, str]]:
+def _create_demo_doctors(db: Session, passwords: Mapping[str, str]) -> list[str]:
     accounts = []
     for demo in DEMO_DOCTORS:
         if db.scalar(select(Doctor.id).where(Doctor.registration_number == demo.registration_number)):
             continue
         if db.scalar(select(User.id).where(User.username == demo.username)):
             continue
-        password = token_urlsafe(12)
+        password = passwords.get(demo.username)
+        if not password:
+            raise RuntimeError(
+                f"CLINIC_DEMO_DOCTOR_PASSWORDS must include a password for '{demo.username}'."
+            )
         user = User(username=demo.username, password_hash=hash_password(password),
                     role=UserRole.DOCTOR, is_active=True)
         doctor = Doctor(
@@ -137,7 +142,7 @@ def _create_demo_doctors(db: Session) -> list[tuple[str, str]]:
             for weekday, start, end in demo.sessions
         ]
         db.add(doctor)
-        accounts.append((demo.username, password))
+        accounts.append(demo.username)
     return accounts
 
 
@@ -175,8 +180,11 @@ if __name__ == "__main__":
     from app.core.config import get_settings
     from app.db.session import engine
 
+    settings = get_settings()
+    passwords = {username: secret.get_secret_value()
+                 for username, secret in settings.demo_doctor_passwords.items()}
     with Session(engine) as session:
-        created = seed_demo_data(session, get_settings().timezone)
+        created = seed_demo_data(session, settings.timezone, passwords)
     print("Demo data is ready.")
-    for username, password in created:
-        print(f"  New doctor account: {username}  password: {password}")
+    for username in created:
+        print(f"  New doctor account: {username}")

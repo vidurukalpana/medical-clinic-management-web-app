@@ -47,6 +47,16 @@ class ChatbotUnavailableError(ServiceUnavailableError):
     default_detail = "The chat assistant is unavailable right now. Please try again later."
 
 
+class TooManyRequestsError(ApplicationError):
+    """Raised when a client address sends too many requests to a limited endpoint."""
+
+    default_detail = "Too many requests. Please wait a moment and try again."
+
+    def __init__(self, retry_after: int) -> None:
+        self.retry_after = retry_after
+        super().__init__()
+
+
 class NotFoundError(ApplicationError):
     """Raised when a requested resource does not exist."""
 

@@ -17,6 +17,7 @@ from app.schemas.appointment import (
 from app.schemas.patient import PatientCreate
 from app.services import appointments, sms
 from app.services.patients import create_patient
+from app.services.rate_limit import GUEST_ACCESS_LIMIT, GUEST_BOOKING_LIMIT
 from app.services.security import create_session_token, hash_session_token
 
 router = APIRouter(tags=["appointments"])
@@ -143,7 +144,8 @@ def read_booking_status(
     )
 
 
-@router.post("/guest/appointments", response_model=GuestBookingConfirmation, status_code=201)
+@router.post("/guest/appointments", response_model=GuestBookingConfirmation, status_code=201,
+             dependencies=[GUEST_BOOKING_LIMIT])
 def book_as_guest(
     data: GuestBookingCreate, db: DatabaseSession, settings: AppSettings,
     response: Response, user: OptionalUser,
@@ -187,19 +189,22 @@ def guest_appointment(
 GuestAppointment = Annotated[tuple[Doctor, Appointment], Depends(guest_appointment)]
 
 
-@router.get("/guest/appointments/{appointment_id}", response_model=GuestBookingRead)
+@router.get("/guest/appointments/{appointment_id}", response_model=GuestBookingRead,
+            dependencies=[GUEST_ACCESS_LIMIT])
 def read_guest_booking(managed: GuestAppointment) -> GuestBookingRead:
     return GuestBookingRead.model_validate(managed[1])
 
 
-@router.put("/guest/appointments/{appointment_id}/cancel", response_model=GuestBookingRead)
+@router.put("/guest/appointments/{appointment_id}/cancel", response_model=GuestBookingRead,
+            dependencies=[GUEST_ACCESS_LIMIT])
 def cancel_guest_booking(managed: GuestAppointment, db: DatabaseSession) -> GuestBookingRead:
     appointments.cancel_appointment(db, managed[1])
     save_appointment(db)
     return GuestBookingRead.model_validate(managed[1])
 
 
-@router.put("/guest/appointments/{appointment_id}/reschedule", response_model=GuestBookingRead)
+@router.put("/guest/appointments/{appointment_id}/reschedule", response_model=GuestBookingRead,
+            dependencies=[GUEST_ACCESS_LIMIT])
 def move_guest_booking(
     data: AppointmentReschedule, managed: GuestAppointment,
     db: DatabaseSession, settings: AppSettings,

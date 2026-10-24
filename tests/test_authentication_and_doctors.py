@@ -339,3 +339,47 @@ def test_admin_can_still_find_inactive_doctors(client, test_settings):
     assert client.get(f"/api/doctors/{doctor['id']}").status_code == 404
     assert doctor["id"] in {d["id"] for d in client.get("/api/admin/doctors", headers=headers).json()}
     assert client.get("/api/admin/doctors").status_code == 401
+
+
+def test_login_attempts_are_rate_limited_per_address(
+    client: TestClient,
+    test_settings: Settings,
+) -> None:
+    for _ in range(10):
+        response = client.post(
+            "/api/auth/login",
+            json={"username": test_settings.admin_username, "password": "wrong-password"},
+        )
+        assert response.status_code == 401
+
+    # Even the right password is refused until the window passes.
+    response = client.post(
+        "/api/auth/login",
+        json={
+            "username": test_settings.admin_username,
+            "password": configured_password(test_settings.admin_password),
+        },
+    )
+    assert response.status_code == 429
+    assert 0 < int(response.headers["Retry-After"]) <= 5 * 60
+    assert response.json()["detail"] == "Too many requests. Please wait a moment and try again."
+
+
+def test_rate_limit_window_slides(monkeypatch) -> None:
+    import pytest
+
+    from app.errors import TooManyRequestsError
+    from app.services import rate_limit
+
+    now = 1000.0
+    monkeypatch.setattr(rate_limit, "monotonic", lambda: now)
+    limiter = rate_limit.RateLimiter()
+    limiter.hit("login:1.2.3.4", 2, 60)
+    limiter.hit("login:1.2.3.4", 2, 60)
+    limiter.hit("login:5.6.7.8", 2, 60)  # Other addresses have their own count.
+    with pytest.raises(TooManyRequestsError) as error:
+        limiter.hit("login:1.2.3.4", 2, 60)
+    assert error.value.retry_after == 60
+
+    now += 60
+    limiter.hit("login:1.2.3.4", 2, 60)

@@ -14,6 +14,7 @@ from app.errors.exceptions import (
     InvalidCurrentPasswordError,
     NotFoundError,
     ServiceUnavailableError,
+    TooManyRequestsError,
     UnavailabilityOverlapError,
 )
 
@@ -31,5 +32,6 @@ __all__ = [
     "InvalidCurrentPasswordError",
     "NotFoundError",
     "ServiceUnavailableError",
+    "TooManyRequestsError",
     "UnavailabilityOverlapError",
 ]

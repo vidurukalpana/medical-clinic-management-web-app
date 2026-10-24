@@ -15,7 +15,7 @@ A FastAPI backend for public appointment booking and staff-managed clinic queues
 
 Guest bookings create a minimal patient record with no required birth date, gender, address or emergency contact. Staff can still maintain optional demographic/contact information. Names and phone numbers are not treated as proof of identity, and guest submissions never attach themselves to an existing patient record by matching these values.
 
-**Phone verification is not implemented:** no SMS/email provider is configured. A booking management token proves possession of that token, not ownership of a phone number or a medical identity. Keep it private. Before public deployment, integrate contact verification and abuse protection/rate limiting at the API gateway or application layer. Use HTTPS and avoid logging authorization headers, booking tokens or request bodies.
+**Phone verification is not implemented:** no SMS/email provider is configured. A booking management token proves possession of that token, not ownership of a phone number or a medical identity. Keep it private. Before public deployment, integrate contact verification. Login, patient registration, guest booking, guest booking access and the chat assistant are rate limited per client address in the API process (`CLINIC_RATE_LIMIT_ENABLED`); behind a reverse proxy, set `CLINIC_TRUSTED_PROXY_IPS` to its address so each patient is counted separately. Use HTTPS and avoid logging authorization headers, booking tokens or request bodies.
 
 ## Technology
 
@@ -75,7 +75,7 @@ Copy the example configuration:
 cp .env.example .env
 ```
 
-Open `.env`, replace `change-this-password` in the PostgreSQL URL with the password used when creating `clinic_app`, and choose strong initial passwords for the administrator and both doctors. The `.env` file is ignored by Git because it contains database credentials and other secrets.
+Open `.env`, replace `change-this-password` in the PostgreSQL URL with the password used when creating `clinic_app`, and choose strong initial passwords for the administrator and both doctors. The `.env` file is ignored by Git because it contains database credentials and other secrets. The example sets `CLINIC_DEBUG=true` for local use; with debug off (the default, and the setting for production) the API refuses to start while an initial account password is an example value or shorter than 12 characters.
 
 ### 6. Create the tables and start the application
 
@@ -115,7 +115,7 @@ For local development, add fictional doctors with specialties and weekly session
 python -m app.db.demo_data
 ```
 
-It also fills in empty profile fields for the two startup doctors, prints a random password for each new demo doctor account, and is safe to run again. Demo patients use phone numbers starting `070 000 0`. Never run it against a real clinic database.
+It also fills in empty profile fields for the two startup doctors, creates each demo doctor account with its password from `CLINIC_DEMO_DOCTOR_PASSWORDS` in `.env`, and is safe to run again. Accounts that already exist keep their passwords. Demo patients use phone numbers starting `070 000 0`. Never run it against a real clinic database.
 
 ### Run with PyCharm
 
@@ -300,7 +300,7 @@ Configure the model in `.env`:
 | `CLINIC_CHATBOT_MODEL` | `llama3.2:1b` | Ollama model name |
 | `CLINIC_CHATBOT_TIMEOUT_SECONDS` | `60` | Maximum time to wait for an answer |
 
-Before a public deployment, add rate limiting for this endpoint, because every question uses model compute.
+Each address can ask 15 questions a minute, because every question uses model compute.
 
 ## Text messages to patients
 

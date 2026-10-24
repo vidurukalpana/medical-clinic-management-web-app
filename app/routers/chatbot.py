@@ -6,6 +6,7 @@ from app.core.config import Settings, get_settings
 from app.dependencies import DatabaseSession
 from app.schemas.chatbot import ChatReply, ChatRequest
 from app.services.chatbot import ChatModel, OllamaChatModel, answer_question
+from app.services.rate_limit import CHATBOT_LIMIT
 
 router = APIRouter(prefix="/chatbot", tags=["chatbot"])
 AppSettings = Annotated[Settings, Depends(get_settings)]
@@ -24,6 +25,7 @@ def get_chat_model(settings: AppSettings) -> ChatModel:
     response_model=ChatReply,
     summary="Ask the clinic assistant a question",
     responses={503: {"description": "The chat assistant is unavailable"}},
+    dependencies=[CHATBOT_LIMIT],
 )
 def ask_question(
     chat: ChatRequest,
