@@ -15,7 +15,7 @@ A FastAPI backend for public appointment booking and staff-managed clinic queues
 
 Guest bookings create a minimal patient record with no required birth date, gender, address or emergency contact. Staff can still maintain optional demographic/contact information. Names and phone numbers are not treated as proof of identity, and guest submissions never attach themselves to an existing patient record by matching these values.
 
-**Phone verification is not implemented:** no SMS/email provider is configured. A booking management token proves possession of that token, not ownership of a phone number or a medical identity. Keep it private. Before public deployment, integrate contact verification and abuse protection/rate limiting at the API gateway or application layer. Use HTTPS and avoid logging authorization headers, booking tokens or request bodies.
+**Phone verification is not implemented:** no SMS/email provider is configured. A booking management token proves possession of that token, not ownership of a phone number or a medical identity. Keep it private. Before public deployment, integrate contact verification. Login, patient registration, guest booking, guest booking access and the chat assistant are rate limited per client address in the API process (`CLINIC_RATE_LIMIT_ENABLED`); behind a reverse proxy, set `CLINIC_TRUSTED_PROXY_IPS` to its address so each patient is counted separately. Use HTTPS and avoid logging authorization headers, booking tokens or request bodies.
 
 ## Technology
 
@@ -300,7 +300,7 @@ Configure the model in `.env`:
 | `CLINIC_CHATBOT_MODEL` | `llama3.2:1b` | Ollama model name |
 | `CLINIC_CHATBOT_TIMEOUT_SECONDS` | `60` | Maximum time to wait for an answer |
 
-Before a public deployment, add rate limiting for this endpoint, because every question uses model compute.
+Each address can ask 15 questions a minute, because every question uses model compute.
 
 ## Text messages to patients
 

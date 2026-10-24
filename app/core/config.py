@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     port: int = 8000
     secret_key: SecretStr = SecretStr("local-development-only")
     session_expire_hours: int = Field(default=12, ge=1, le=168)
+    # Per-address limits on login, registration, guest booking and the chat assistant.
+    rate_limit_enabled: bool = True
+    # Behind a reverse proxy, its address; uvicorn then takes the client address from X-Forwarded-For.
+    trusted_proxy_ips: str = "127.0.0.1"
 
     admin_username: str = "admin"
     admin_password: SecretStr | None = None

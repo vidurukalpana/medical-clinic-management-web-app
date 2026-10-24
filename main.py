@@ -12,6 +12,7 @@ from app.db.session import engine
 from app.errors.handlers import register_error_handlers
 from app.routers import visits, admin, appointments, auth, chatbot, clinic, doctor_scheduling, doctors, health, patients
 from app.services import sms
+from app.services.rate_limit import RateLimiter
 
 settings = get_settings()
 
@@ -40,6 +41,7 @@ def create_app(
         debug=app_settings.debug,
         lifespan=lifespan,
     )
+    application.state.rate_limiter = RateLimiter() if app_settings.rate_limit_enabled else None
     register_error_handlers(application)
     application.include_router(visits.router, prefix="/api")
     application.include_router(health.router, prefix="/api")
@@ -74,4 +76,6 @@ if __name__ == "__main__":
         host=settings.host,
         port=settings.port,
         reload=settings.debug,
+        proxy_headers=True,
+        forwarded_allow_ips=settings.trusted_proxy_ips,
     )
