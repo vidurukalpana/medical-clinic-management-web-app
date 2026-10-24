@@ -1,0 +1,594 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CareFlow — Clinic Booking System</title>
+  <meta name="description" content="CareFlow is a booking and queue system for medical clinics: online booking, numbered sessions, a live queue, QR check-in, SMS reminders and a staff portal." />
+  <meta name="theme-color" content="#0c0a1d" />
+  <link rel="icon" type="image/svg+xml" href="images/mark.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --night: #0c0a1d;
+      --night-2: #17142f;
+      --paper: #faf8f4;
+      --paper-2: #f3efe7;
+      --ink: #17142b;
+      --ink-2: #45415c;
+      --muted: #77738c;
+      --line: #e3ddd1;
+      --indigo: #5046e5;
+      --indigo-soft: #eeedfd;
+      --amber: #f5a524;
+      --on-night: #e9e7f5;
+      --on-night-muted: #a19dbd;
+      color-scheme: light;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; scroll-padding-top: 64px; }
+    body {
+      margin: 0; font-family: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+      color: var(--ink-2); background: var(--paper); line-height: 1.65; -webkit-font-smoothing: antialiased;
+    }
+    img { max-width: 100%; display: block; }
+    a { color: var(--indigo); }
+    h1, h2, h3, h4 { color: var(--ink); line-height: 1.2; margin: 0; font-weight: 600; }
+    p { margin: 0; }
+    .container { width: min(1120px, 100% - 32px); margin-inline: auto; }
+
+    /* Header */
+    .nav { position: sticky; top: 0; z-index: 50; background: var(--night); border-bottom: 1px solid rgba(255, 255, 255, .08); }
+    .nav-inner { display: flex; align-items: center; justify-content: space-between; height: 60px; gap: 24px; }
+    .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: #fff; font-weight: 600; font-size: 1.05rem; }
+    .brand img { width: 26px; height: 26px; border-radius: 6px; }
+    .nav-links { display: flex; align-items: center; gap: 26px; list-style: none; margin: 0; padding: 0; }
+    .nav-links a { text-decoration: none; color: var(--on-night-muted); font-size: .92rem; }
+    .nav-links a:hover, .nav-links a.active { color: #fff; }
+    .nav-links .gh { color: #fff; border: 1px solid rgba(255, 255, 255, .25); padding: 6px 14px; border-radius: 6px; }
+    .nav-links .gh:hover { background: rgba(255, 255, 255, .08); }
+    .menu-btn { display: none; background: none; border: 1px solid rgba(255, 255, 255, .25); border-radius: 6px; padding: 5px 10px; cursor: pointer; color: #fff; font: inherit; font-size: .9rem; }
+    @media (max-width: 860px) {
+      .menu-btn { display: block; }
+      .nav-links { display: none; position: absolute; top: 60px; left: 0; right: 0; flex-direction: column; align-items: flex-start; gap: 14px; background: var(--night); padding: 16px; border-bottom: 1px solid rgba(255, 255, 255, .08); }
+      .nav-links.open { display: flex; }
+    }
+
+    /* Hero */
+    .hero { background: var(--night); color: var(--on-night); padding: 80px 0 0; overflow: hidden; }
+    .hero h1 { color: #fff; font-size: clamp(2.2rem, 4.6vw, 3.4rem); font-weight: 600; letter-spacing: -.02em; max-width: 18ch; }
+    .hero h1 span { color: var(--amber); }
+    .hero .lead { font-size: 1.12rem; color: var(--on-night-muted); max-width: 36em; margin-top: 20px; }
+    .actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
+    .btn { display: inline-block; padding: 11px 20px; border-radius: 6px; font-weight: 600; text-decoration: none; font-size: .95rem; }
+    .btn-amber { background: var(--amber); color: var(--night); }
+    .btn-amber:hover { background: #ffb43d; }
+    .btn-line { color: #fff; border: 1px solid rgba(255, 255, 255, .3); }
+    .btn-line:hover { background: rgba(255, 255, 255, .08); }
+    .hero-shot { margin-top: 56px; border-radius: 10px 10px 0 0; overflow: hidden; border: 1px solid rgba(255, 255, 255, .12); border-bottom: none; }
+    .hero-shot img { width: 100%; }
+
+    /* Sections */
+    section.block { padding: 84px 0; }
+    section.alt { background: var(--paper-2); }
+    .section-head { max-width: 680px; margin-bottom: 40px; }
+    .section-head h2 { font-size: clamp(1.7rem, 3vw, 2.2rem); letter-spacing: -.01em; }
+    .section-head p { margin-top: 12px; font-size: 1.05rem; }
+    .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 40px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 32px; }
+    @media (max-width: 860px) { .grid-3 { grid-template-columns: 1fr; gap: 28px; } }
+    @media (max-width: 720px) { .grid-2 { grid-template-columns: 1fr; gap: 32px; } }
+    .grid-2 > *, .grid-3 > * { min-width: 0; }
+
+    /* Why */
+    .problems { margin: 0; padding: 0; list-style: none; }
+    .problems li { padding: 16px 0; border-bottom: 1px solid var(--line); }
+    .problems li:first-child { padding-top: 0; }
+    .problems b { color: var(--ink); }
+    .solution { background: var(--night); color: var(--on-night-muted); border-radius: 8px; padding: 30px; }
+    .solution h3 { color: #fff; font-size: 1.2rem; }
+    .solution ul { margin: 16px 0 0; padding-left: 18px; }
+    .solution li { margin: 10px 0; }
+    .solution li::marker { color: var(--amber); }
+    .solution b { color: #fff; font-weight: 600; }
+
+    /* Who */
+    .role { border-top: 3px solid var(--indigo); padding-top: 20px; }
+    .role.r2 { border-top-color: var(--amber); }
+    .role.r3 { border-top-color: var(--night); }
+    .role h3 { font-size: 1.15rem; }
+    .role .sub { color: var(--muted); font-size: .92rem; margin-top: 2px; }
+    .role ul { margin: 14px 0 0; padding-left: 18px; }
+    .role li { margin: 6px 0; }
+
+    /* Features */
+    .features { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--line); }
+    .feature { padding: 26px 28px 26px 0; border-bottom: 1px solid var(--line); }
+    .feature h3 { font-size: 1.05rem; margin-bottom: 6px; }
+    .feature p { font-size: .95rem; }
+    @media (max-width: 860px) { .features { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 560px) { .features { grid-template-columns: 1fr; } .feature { padding-right: 0; } }
+
+    /* How it works */
+    .steps { margin: 0; padding: 0; list-style: none; counter-reset: step; }
+    .steps li { counter-increment: step; display: grid; grid-template-columns: 40px 1fr; gap: 14px; padding: 0 0 22px; }
+    .steps li::before { content: counter(step); width: 30px; height: 30px; border-radius: 50%; background: var(--night); color: #fff; font-weight: 600; font-size: .88rem; display: grid; place-items: center; }
+    .steps h3 { font-size: 1.05rem; }
+    .steps .who { color: var(--muted); font-weight: 400; font-size: .9rem; }
+    .panel { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 26px; }
+    .panel h3 { font-size: 1.1rem; margin-bottom: 8px; }
+    .session-demo { display: grid; grid-template-columns: repeat(10, 1fr); gap: 5px; margin: 18px 0 12px; }
+    .seat { aspect-ratio: 1; border-radius: 4px; display: grid; place-items: center; font-size: .75rem; font-weight: 600; }
+    .seat.online { background: var(--paper-2); color: var(--muted); }
+    .seat.taken { background: var(--indigo); color: #fff; }
+    .seat.now { background: var(--amber); color: var(--night); }
+    .seat.kept { background: #fff; color: var(--ink-2); border: 1px dashed var(--ink-2); }
+    .legend { display: flex; flex-wrap: wrap; gap: 16px; font-size: .84rem; color: var(--muted); }
+    .legend i { display: inline-block; width: 11px; height: 11px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+
+    /* Screens */
+    .gallery { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px 24px; }
+    @media (max-width: 860px) { .gallery { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 560px) { .gallery { grid-template-columns: 1fr; } }
+    .shot { margin: 0; }
+    .shot button { all: unset; cursor: zoom-in; display: block; width: 100%; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+    .shot button:focus-visible { outline: 3px solid var(--indigo); outline-offset: 2px; }
+    .shot img { aspect-ratio: 16 / 10; object-fit: cover; object-position: top; width: 100%; }
+    .shot-phone img { object-fit: contain; background: var(--night); padding: 10px 0; }
+    .shot figcaption { padding-top: 12px; font-size: .92rem; }
+    .shot figcaption b { color: var(--ink); font-weight: 600; }
+    .shot figcaption span { color: var(--muted); }
+    dialog.lightbox { border: none; padding: 0; background: transparent; max-width: min(1200px, 94vw); }
+    dialog.lightbox::backdrop { background: rgba(12, 10, 29, .88); }
+    dialog.lightbox img { max-height: 86vh; width: auto; margin: auto; border-radius: 6px; }
+    dialog.lightbox p { color: var(--on-night); text-align: center; margin-top: 12px; }
+    dialog.lightbox .close { position: fixed; top: 16px; right: 20px; padding: 8px 14px; border-radius: 6px; border: 1px solid rgba(255, 255, 255, .3); background: transparent; color: #fff; font: inherit; cursor: pointer; }
+
+    /* Architecture */
+    .diagram { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 24px; overflow-x: auto; }
+    .diagram svg { min-width: 760px; width: 100%; height: auto; display: block; }
+    .tech-list { margin-top: 18px; font-size: .95rem; }
+    .tech-list b { color: var(--ink); font-weight: 600; }
+
+    /* Data */
+    table { width: 100%; border-collapse: collapse; font-size: .96rem; background: #fff; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+    th, td { text-align: left; padding: 13px 18px; border-bottom: 1px solid var(--line); vertical-align: top; }
+    th { background: var(--paper-2); color: var(--ink); font-weight: 600; font-size: .88rem; }
+    td:first-child { color: var(--ink); font-weight: 600; white-space: nowrap; width: 180px; }
+    tr:last-child td { border-bottom: none; }
+    @media (max-width: 560px) { td:first-child { white-space: normal; width: auto; } th, td { padding: 11px 12px; } }
+
+    /* Privacy (dark) */
+    section.dark { background: var(--night); color: var(--on-night-muted); }
+    section.dark h2, section.dark h3 { color: #fff; }
+    section.dark .section-head p { color: var(--on-night-muted); }
+    .points { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0 48px; }
+    .point { padding: 20px 0; border-top: 1px solid rgba(255, 255, 255, .1); }
+    .point h3 { font-size: 1.02rem; margin-bottom: 4px; }
+    .point p { font-size: .95rem; }
+    @media (max-width: 720px) { .points { grid-template-columns: 1fr; } }
+
+    /* Timeline */
+    .timeline { margin: 0; padding: 0; list-style: none; max-width: 820px; }
+    .timeline li { display: grid; grid-template-columns: 120px 1fr; gap: 24px; padding: 16px 0; border-bottom: 1px solid var(--line); }
+    .timeline time { color: var(--indigo); font-weight: 600; font-size: .92rem; }
+    .timeline h3 { font-size: 1.02rem; margin-bottom: 2px; }
+    .timeline p { font-size: .95rem; }
+    @media (max-width: 560px) { .timeline li { grid-template-columns: 1fr; gap: 2px; } }
+
+    /* Status */
+    .status h3 { font-size: 1.1rem; margin-bottom: 12px; }
+    .status h3 span { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 10px; vertical-align: 1px; }
+    .status ul { margin: 0; padding-left: 18px; }
+    .status li { margin: 8px 0; }
+    .status li b { color: var(--ink); font-weight: 600; }
+
+    /* Footer */
+    footer { background: var(--night); color: var(--on-night-muted); padding: 40px 0; font-size: .92rem; }
+    .foot { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 24px; }
+    .foot .brand { font-size: 1rem; }
+    .foot p { margin-top: 10px; max-width: 34em; }
+    .foot-links { display: flex; flex-wrap: wrap; gap: 22px; list-style: none; margin: 0; padding: 0; }
+    footer a { color: var(--on-night); text-decoration: none; }
+    footer a:hover { color: var(--amber); }
+    .foot-note { border-top: 1px solid rgba(255, 255, 255, .1); margin-top: 28px; padding-top: 18px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; font-size: .85rem; }
+  </style>
+</head>
+<body>
+
+<header class="nav">
+  <div class="container nav-inner">
+    <a class="brand" href="#top"><img src="images/mark.svg" alt="" />CareFlow</a>
+    <button class="menu-btn" aria-label="Open menu" aria-expanded="false" aria-controls="nav-links">Menu</button>
+    <ul class="nav-links" id="nav-links">
+      <li><a href="#features">Features</a></li>
+      <li><a href="#how">How it works</a></li>
+      <li><a href="#screens">Screens</a></li>
+      <li><a href="#architecture">Architecture</a></li>
+      <li><a href="#privacy">Privacy</a></li>
+      <li><a href="#status">Status</a></li>
+      <li><a class="gh" href="https://github.com/vidurukalpana/medical-clinic-management-web-app">GitHub</a></li>
+    </ul>
+  </div>
+</header>
+
+<main id="top">
+  <section class="hero">
+    <div class="container">
+      <h1>Online booking and live queues for <span>medical clinics</span></h1>
+      <p class="lead">CareFlow lets patients book a doctor online without creating an account and follow the queue from home. Reception and doctors manage the day from one staff portal.</p>
+      <div class="actions">
+        <a class="btn btn-amber" href="#how">How it works</a>
+        <a class="btn btn-line" href="https://github.com/vidurukalpana/medical-clinic-management-web-app">View on GitHub</a>
+      </div>
+      <div class="hero-shot"><img src="images/home.jpg" alt="The CareFlow public website home page" /></div>
+    </div>
+  </section>
+
+  <section class="block" id="why">
+    <div class="container">
+      <div class="section-head">
+        <h2>The problem</h2>
+        <p>At many small clinics, booking still means a phone call and a paper register, and patients wait for hours without knowing when their turn will come.</p>
+      </div>
+      <div class="grid-2">
+        <ul class="problems">
+          <li><b>Booking is slow.</b> Patients have to call during reception hours to get a number.</li>
+          <li><b>No idea when to arrive.</b> Without seeing the queue, everyone comes early and the waiting room fills up.</li>
+          <li><b>Reception juggles everything.</b> Bookings, walk-ins, check-ins and doctor schedules are kept in different places.</li>
+          <li><b>Changes are hard to announce.</b> When a doctor can't come, someone has to phone every patient.</li>
+        </ul>
+        <div class="solution">
+          <h3>What CareFlow does</h3>
+          <ul>
+            <li>Patients book online in three steps and get a <b>numbered place</b> in a doctor's session.</li>
+            <li>A <b>live queue page</b> shows which number is being seen, so patients can arrive on time.</li>
+            <li>Reception <b>scans a QR code</b> to check patients in and adds walk-ins quickly.</li>
+            <li>Patients receive <b>text confirmations and reminders</b>.</li>
+            <li>A <b>chat assistant</b> answers common questions about doctors, hours and booking.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block alt" id="who">
+    <div class="container">
+      <div class="section-head">
+        <h2>Who uses it</h2>
+        <p>Patients use the public website. Doctors and administrators sign in to the staff portal, and each sees only what they need.</p>
+      </div>
+      <div class="grid-3">
+        <div class="role">
+          <h3>Patients</h3>
+          <p class="sub">Book and track a visit</p>
+          <ul>
+            <li>Find a doctor by name, specialty, language or day</li>
+            <li>Book with only a name and phone number</li>
+            <li>Move or cancel with a private booking code</li>
+            <li>Follow the live queue from anywhere</li>
+            <li>Optionally create an account to see all bookings</li>
+          </ul>
+        </div>
+        <div class="role r2">
+          <h3>Administrators and reception</h3>
+          <p class="sub">Run the clinic day</p>
+          <ul>
+            <li>Live dashboard of every doctor's queue</li>
+            <li>Register patients, book and add walk-ins</li>
+            <li>Check patients in by scanning their QR code</li>
+            <li>Manage doctors, accounts and schedules</li>
+            <li>Cancel a session and see who to contact</li>
+          </ul>
+        </div>
+        <div class="role r3">
+          <h3>Doctors</h3>
+          <p class="sub">See their own patients</p>
+          <ul>
+            <li>Their own queue and today's appointments</li>
+            <li>Start and complete each consultation</li>
+            <li>Set weekly sessions and time off</li>
+            <li>Edit their public profile</li>
+            <li>No access to other doctors' patients</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="features">
+    <div class="container">
+      <div class="section-head">
+        <h2>Features</h2>
+      </div>
+      <div class="features">
+        <div class="feature"><h3>Guest booking</h3><p>Choose a doctor, a day and a session, then enter a name and phone number. No account and no medical questions.</p></div>
+        <div class="feature"><h3>Numbered sessions</h3><p>Each doctor has weekly sessions with a patient limit. Every booking gets the next free number, and patients are seen in number order.</p></div>
+        <div class="feature"><h3>Places for walk-ins</h3><p>Each session can keep some places for reception and walk-ins, so online bookings never fill the whole session.</p></div>
+        <div class="feature"><h3>Live queue</h3><p>A public page shows the number being seen and the numbers still waiting. It updates every 20 seconds and never shows names.</p></div>
+        <div class="feature"><h3>QR check-in</h3><p>Every booking has a QR code. Reception scans it with a camera or barcode scanner, and the patient joins the doctor's queue.</p></div>
+        <div class="feature"><h3>Text messages</h3><p>A confirmation when a patient books or moves a booking, and a reminder on the day with their number and check-in code.</p></div>
+        <div class="feature"><h3>Chat assistant</h3><p>Answers questions about doctors, hours, fees and booking. It can't make bookings, never sees patient records and doesn't give medical advice.</p></div>
+        <div class="feature"><h3>Doctor profiles</h3><p>Specialty, qualifications, languages, fee and weekly sessions, with search and filters on the public website.</p></div>
+        <div class="feature"><h3>Staff dashboard</h3><p>Today's figures, each doctor's queue, and quick actions for registering, booking, walk-ins and check-in.</p></div>
+        <div class="feature"><h3>Schedules and time off</h3><p>Weekly sessions for each doctor, plus time off for part of a day or several days.</p></div>
+        <div class="feature"><h3>Session cancellation</h3><p>If a doctor can't come, staff cancel the session in one step and patients can move their booking to another day.</p></div>
+        <div class="feature"><h3>Visit times</h3><p>Records when the doctor arrives and leaves, and when each consultation starts and ends.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block alt" id="how">
+    <div class="container">
+      <div class="section-head">
+        <h2>How it works</h2>
+        <p>A patient's visit from booking to seeing the doctor.</p>
+      </div>
+      <div class="grid-2">
+        <ol class="steps">
+          <li><div><h3>Find a doctor <span class="who">· Patient</span></h3><p>Search by name or specialty, or ask the chat assistant.</p></div></li>
+          <li><div><h3>Book a session <span class="who">· Patient</span></h3><p>Choose a day and session and enter a name and phone number. A number is given straight away.</p></div></li>
+          <li><div><h3>Booking confirmed <span class="who">· System</span></h3><p>A private booking code and a QR code are shown, and a text confirmation is sent.</p></div></li>
+          <li><div><h3>Reminder on the day <span class="who">· System</span></h3><p>A text a few hours before the session with the patient's number and check-in code.</p></div></li>
+          <li><div><h3>Follow the live queue <span class="who">· Patient</span></h3><p>See which number is being seen and leave home at the right time.</p></div></li>
+          <li><div><h3>Check in <span class="who">· Reception</span></h3><p>Reception scans the QR code and the patient joins the doctor's queue.</p></div></li>
+          <li><div><h3>Consultation <span class="who">· Doctor</span></h3><p>The doctor starts and completes the visit in the portal, and the queue moves on.</p></div></li>
+        </ol>
+        <div>
+          <div class="panel">
+            <h3>How numbers work</h3>
+            <p>Each session has a patient limit. Some places can be kept for reception and walk-ins, and online bookings fill the rest.</p>
+            <div class="session-demo" aria-label="Example session with 20 places">
+              <div class="seat taken">1</div><div class="seat taken">2</div><div class="seat taken">3</div><div class="seat now">4</div><div class="seat taken">5</div>
+              <div class="seat taken">6</div><div class="seat taken">7</div><div class="seat online">8</div><div class="seat online">9</div><div class="seat online">10</div>
+              <div class="seat online">11</div><div class="seat online">12</div><div class="seat online">13</div><div class="seat online">14</div><div class="seat online">15</div>
+              <div class="seat online">16</div><div class="seat kept">17</div><div class="seat kept">18</div><div class="seat kept">19</div><div class="seat kept">20</div>
+            </div>
+            <div class="legend">
+              <span><i style="background:#f5a524"></i>Being seen</span>
+              <span><i style="background:#5046e5"></i>Booked</span>
+              <span><i style="background:#f3efe7"></i>Open online</span>
+              <span><i style="background:#fff;border:1px dashed #45415c"></i>Kept for walk-ins</span>
+            </div>
+            <p style="margin-top:14px;font-size:.93rem">A cancelled number goes to the next booking. Walk-ins get the next free number in the earliest open session of the day.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="screens">
+    <div class="container">
+      <div class="section-head">
+        <h2>Screens</h2>
+        <p>Screenshots from the application with demo data. The doctors and clinic details shown are fictional. Select an image to enlarge it.</p>
+      </div>
+      <div class="gallery">
+        <figure class="shot"><button type="button" data-full="images/home.jpg"><img src="images/home.jpg" alt="Public home page" /></button><figcaption><b>Home</b> <span>· Public website</span></figcaption></figure>
+        <figure class="shot"><button type="button" data-full="images/doctors.jpg"><img src="images/doctors.jpg" alt="Find a doctor page" /></button><figcaption><b>Find a doctor</b> <span>· Public website</span></figcaption></figure>
+        <figure class="shot"><button type="button" data-full="images/book.jpg"><img src="images/book.jpg" alt="Booking page" /></button><figcaption><b>Book a visit</b> <span>· Public website</span></figcaption></figure>
+        <figure class="shot"><button type="button" data-full="images/chat.jpg"><img src="images/chat.jpg" alt="Chat assistant" /></button><figcaption><b>Chat assistant</b> <span>· Public website</span></figcaption></figure>
+        <figure class="shot"><button type="button" data-full="images/staff-dashboard.jpg"><img src="images/staff-dashboard.jpg" alt="Staff dashboard" /></button><figcaption><b>Dashboard</b> <span>· Staff portal</span></figcaption></figure>
+        <figure class="shot"><button type="button" data-full="images/staff-schedule.jpg"><img src="images/staff-schedule.jpg" alt="Staff schedule page" /></button><figcaption><b>Schedule</b> <span>· Staff portal</span></figcaption></figure>
+        <figure class="shot"><button type="button" data-full="images/staff-checkin.jpg"><img src="images/staff-checkin.jpg" alt="Staff check-in page" /></button><figcaption><b>Check-in</b> <span>· Staff portal</span></figcaption></figure>
+        <figure class="shot shot-phone"><button type="button" data-full="images/mobile-home.jpg"><img src="images/mobile-home.jpg" alt="Home page on a phone" /></button><figcaption><b>Mobile</b> <span>· Public website</span></figcaption></figure>
+      </div>
+    </div>
+  </section>
+
+  <section class="block alt" id="architecture">
+    <div class="container">
+      <div class="section-head">
+        <h2>Architecture</h2>
+        <p>A React web application talks to a Python API. The API stores data in PostgreSQL, uses a local AI model for the chat assistant, and runs a background job for text messages.</p>
+      </div>
+      <div class="diagram">
+        <svg viewBox="0 0 1000 400" role="img" aria-labelledby="arch-title">
+          <title id="arch-title">Patients and staff use the React web application, which calls the FastAPI backend. The backend stores data in PostgreSQL, asks Ollama for chat answers, and sends text messages through an SMS gateway.</title>
+          <defs>
+            <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" fill="#77738c" /></marker>
+          </defs>
+          <style>
+            .bx { fill: #fff; stroke: #e3ddd1; stroke-width: 1.5; }
+            .t { font: 600 15px "IBM Plex Sans", sans-serif; fill: #17142b; }
+            .s { font: 400 12.5px "IBM Plex Sans", sans-serif; fill: #77738c; }
+            .tw { font: 600 16px "IBM Plex Sans", sans-serif; fill: #fff; }
+            .sw { font: 400 12.5px "IBM Plex Sans", sans-serif; fill: #c9c6e3; }
+            .ln { stroke: #77738c; stroke-width: 2; fill: none; marker-end: url(#arrow); }
+            .lbl { font: 600 11.5px "IBM Plex Sans", sans-serif; fill: #5046e5; }
+          </style>
+          <rect class="bx" x="20" y="60" width="190" height="80" rx="8" />
+          <text class="t" x="40" y="94">Patients</text>
+          <text class="s" x="40" y="116">Phone or computer</text>
+          <rect class="bx" x="20" y="250" width="190" height="80" rx="8" />
+          <text class="t" x="40" y="284">Staff</text>
+          <text class="s" x="40" y="306">Reception, doctors, admins</text>
+          <rect x="270" y="40" width="210" height="310" rx="10" fill="#eeedfd" stroke="#c9c4f7" stroke-width="1.5" />
+          <text class="t" x="290" y="72">React web app</text>
+          <text class="s" x="290" y="92">TypeScript · Vite</text>
+          <rect class="bx" x="290" y="112" width="170" height="70" rx="6" />
+          <text class="t" x="306" y="142">Public website</text>
+          <text class="s" x="306" y="162">Book · Queue · Chat</text>
+          <rect class="bx" x="290" y="240" width="170" height="70" rx="6" />
+          <text class="t" x="306" y="270">Staff portal</text>
+          <text class="s" x="306" y="290">Sign-in required</text>
+          <rect x="540" y="90" width="210" height="210" rx="10" fill="#0c0a1d" />
+          <text class="tw" x="562" y="128">FastAPI backend</text>
+          <text class="sw" x="562" y="150">Python</text>
+          <text class="sw" x="562" y="184">Booking and sessions</text>
+          <text class="sw" x="562" y="206">Queues and check-in</text>
+          <text class="sw" x="562" y="228">Schedules and accounts</text>
+          <text class="sw" x="562" y="250">Access control</text>
+          <text class="sw" x="562" y="272">SMS background job</text>
+          <rect class="bx" x="810" y="30" width="170" height="80" rx="8" />
+          <text class="t" x="828" y="64">PostgreSQL</text>
+          <text class="s" x="828" y="86">Clinic data</text>
+          <rect class="bx" x="810" y="155" width="170" height="80" rx="8" />
+          <text class="t" x="828" y="189">Ollama</text>
+          <text class="s" x="828" y="211">Local AI model</text>
+          <rect x="810" y="280" width="170" height="80" rx="8" fill="#fff8ea" stroke="#f5a524" stroke-dasharray="5 4" stroke-width="1.5" />
+          <text class="t" x="828" y="314">SMS gateway</text>
+          <text class="s" x="828" y="336">Planned</text>
+          <path class="ln" d="M210 100 H286" />
+          <path class="ln" d="M210 290 H286" />
+          <path class="ln" d="M460 147 C500 147 505 170 536 170" />
+          <path class="ln" d="M460 275 C500 275 505 230 536 230" />
+          <text class="lbl" x="489" y="214">API</text>
+          <path class="ln" d="M750 130 C780 130 780 70 806 70" />
+          <path class="ln" d="M750 195 H806" />
+          <path class="ln" d="M750 260 C780 260 780 320 806 320" />
+        </svg>
+      </div>
+      <p class="tech-list"><b>Built with:</b> React, TypeScript, Vite and TanStack Query on the frontend; Python, FastAPI and SQLAlchemy on the backend; PostgreSQL for data; Ollama for the chat assistant.</p>
+    </div>
+  </section>
+
+  <section class="block" id="data">
+    <div class="container">
+      <div class="section-head">
+        <h2>Data</h2>
+        <p>The system stores only what is needed to book and run the queue. There are no fields for diagnoses, prescriptions or consultation notes.</p>
+      </div>
+      <table>
+        <thead><tr><th>Record</th><th>What it holds</th></tr></thead>
+        <tbody>
+          <tr><td>User</td><td>A login for an administrator, doctor or patient. Passwords are stored only as hashes.</td></tr>
+          <tr><td>Doctor</td><td>Public profile: name, specialty, qualifications, languages and fee.</td></tr>
+          <tr><td>Availability</td><td>A weekly session: weekday, start and end time, patient limit and places kept for walk-ins.</td></tr>
+          <tr><td>Time off</td><td>Periods when a doctor is unavailable. Any overlap closes the session.</td></tr>
+          <tr><td>Patient</td><td>Name and phone number, plus optional details added by staff, and a medical record number.</td></tr>
+          <tr><td>Appointment</td><td>A booking: doctor, patient, session, number, status and check-in code.</td></tr>
+          <tr><td>Visit</td><td>A patient in the queue, with the time of each step.</td></tr>
+          <tr><td>Session arrival</td><td>When the doctor arrived for a session and when they left.</td></tr>
+          <tr><td>SMS message</td><td>Each text message to a patient, held until it is sent.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="block dark" id="privacy">
+    <div class="container">
+      <div class="section-head">
+        <h2>Privacy and security</h2>
+        <p>CareFlow is designed to collect as little personal information as possible.</p>
+      </div>
+      <div class="points">
+        <div class="point"><h3>No clinical records</h3><p>The system handles bookings and queues only. Medical details are never requested or stored.</p></div>
+        <div class="point"><h3>Minimal booking details</h3><p>A guest booking needs only a name and phone number, and is never matched to another patient's record.</p></div>
+        <div class="point"><h3>Private booking codes</h3><p>The code to manage a booking is shown once. The server keeps only a hash of it.</p></div>
+        <div class="point"><h3>Numbers, not names</h3><p>The public live queue shows numbers only. A check-in code can't be used without a staff login.</p></div>
+        <div class="point"><h3>Role-based access</h3><p>Doctors see only their own patients. Only administrators manage accounts and doctors.</p></div>
+        <div class="point"><h3>Secure sign-in</h3><p>Passwords are hashed with Argon2, sessions expire, and a password change signs out every device.</p></div>
+        <div class="point"><h3>Request limits</h3><p>Sign-in, booking and the chat assistant limit how often each address can use them.</p></div>
+        <div class="point"><h3>Chat assistant without patient data</h3><p>The assistant sees only public clinic information and schedules. Conversations aren't stored on the server.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block alt" id="timeline">
+    <div class="container">
+      <div class="section-head">
+        <h2>Timeline</h2>
+        <p>Project milestones in 2026.</p>
+      </div>
+      <ol class="timeline">
+        <li><time>25 August</time><div><h3>Project started</h3><p>Requirements and the first database design.</p></div></li>
+        <li><time>30 August</time><div><h3>Backend foundations</h3><p>API project, configuration and staff sign-in.</p></div></li>
+        <li><time>2–3 September</time><div><h3>Patients and schedules</h3><p>Patient registration and search, doctor working hours and time off.</p></div></li>
+        <li><time>16–17 September</time><div><h3>Booking, queues and dashboard</h3><p>Appointments, visits and queues, and the staff dashboard.</p></div></li>
+        <li><time>24–26 September</time><div><h3>Web application and chat assistant</h3><p>The public website, the staff portal and the chat assistant.</p></div></li>
+        <li><time>4 October</time><div><h3>Simpler patient pages</h3><p>A simpler patient-facing design and a "next available" doctor card.</p></div></li>
+        <li><time>12 October</time><div><h3>Sessions, live queue and QR check-in</h3><p>Numbered sessions, places for walk-ins, doctor profiles, session cancellation, the live queue, visit times, QR check-in and text messages.</p></div></li>
+        <li><time>24 October</time><div><h3>Security improvements</h3><p>Request limits and safer production settings.</p></div></li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="block" id="status">
+    <div class="container">
+      <div class="section-head">
+        <h2>Status</h2>
+        <p>CareFlow currently runs locally with demo data. These are the next steps before a clinic can use it online.</p>
+      </div>
+      <div class="grid-2 status">
+        <div>
+          <h3><span style="background:#16a34a"></span>Available now</h3>
+          <ul>
+            <li><b>Public website:</b> booking, doctor search, live queue, booking management and patient accounts</li>
+            <li><b>Staff portal:</b> dashboard, appointments, patients, schedules, check-in and administration</li>
+            <li><b>Chat assistant</b> running on a local AI model</li>
+            <li><b>Text messages</b> recorded in an outbox that administrators can review</li>
+          </ul>
+        </div>
+        <div>
+          <h3><span style="background:#f5a524"></span>Planned</h3>
+          <ul>
+            <li><b>Online deployment</b> with a server, HTTPS and a domain name</li>
+            <li><b>Database migrations</b> for safe upgrades</li>
+            <li><b>An SMS gateway</b> so text messages reach patients' phones</li>
+            <li><b>Daily backups</b></li>
+            <li><b>Reports</b> on waiting times, no-shows and session usage</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="container">
+    <div class="foot">
+      <div>
+        <a class="brand" href="#top"><img src="images/mark.svg" alt="" />CareFlow</a>
+        <p>Booking and queue management for medical clinics.</p>
+      </div>
+      <ul class="foot-links">
+        <li><a href="#features">Features</a></li>
+        <li><a href="#how">How it works</a></li>
+        <li><a href="#architecture">Architecture</a></li>
+        <li><a href="https://github.com/vidurukalpana/medical-clinic-management-web-app">GitHub</a></li>
+      </ul>
+    </div>
+    <div class="foot-note">
+      <span>© 2026 <a href="https://github.com/vidurukalpana">vidurukalpana</a></span>
+      <span>Screenshots use a fictional demo clinic.</span>
+    </div>
+  </div>
+</footer>
+
+<dialog class="lightbox" aria-label="Enlarged screenshot">
+  <button class="close" type="button">Close</button>
+  <img alt="" />
+  <p></p>
+</dialog>
+
+<script>
+  const menuBtn = document.querySelector(".menu-btn");
+  const links = document.getElementById("nav-links");
+  menuBtn.addEventListener("click", () => {
+    const open = links.classList.toggle("open");
+    menuBtn.setAttribute("aria-expanded", String(open));
+  });
+  links.addEventListener("click", (event) => {
+    if (event.target.tagName === "A") {
+      links.classList.remove("open");
+      menuBtn.setAttribute("aria-expanded", "false");
+    }
+  });
+
+  const box = document.querySelector("dialog.lightbox");
+  document.querySelectorAll(".shot button").forEach((button) => {
+    button.addEventListener("click", () => {
+      box.querySelector("img").src = button.dataset.full;
+      box.querySelector("img").alt = button.querySelector("img").alt;
+      box.querySelector("p").textContent = button.closest("figure").querySelector("figcaption b").textContent;
+      box.showModal();
+    });
+  });
+  box.querySelector(".close").addEventListener("click", () => box.close());
+  box.addEventListener("click", (event) => { if (event.target === box) box.close(); });
+</script>
+</body>
+</html>
