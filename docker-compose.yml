@@ -1,0 +1,55 @@
+# Runs the whole system: PostgreSQL, the FastAPI backend and the React app behind Caddy.
+# Copy .env.docker.example to .env.docker, set the passwords, then run `docker compose up --build`
+# and open http://localhost:8080.
+name: careflow
+
+services:
+  db:
+    image: postgres:17-alpine
+    env_file: .env.docker
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  api:
+    build: .
+    env_file: .env.docker
+    depends_on:
+      db:
+        condition: service_healthy
+    # Lets the API reach an Ollama server running on this computer.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    restart: unless-stopped
+
+  web:
+    build: ./frontend
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+
+  # Optional: the chat assistant's model inside Docker. Start with `docker compose --profile chat up`,
+  # then download the model once with `docker compose exec ollama ollama pull llama3.2:1b`.
+  ollama:
+    image: ollama/ollama
+    profiles: ["chat"]
+    volumes:
+      - ollama-models:/root/.ollama
+    restart: unless-stopped
+
+volumes:
+  db-data:
+  ollama-models:

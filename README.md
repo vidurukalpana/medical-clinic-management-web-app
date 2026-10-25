@@ -26,6 +26,30 @@ Guest bookings create a minimal patient record with no required birth date, gend
 
 A cloud deployment can be introduced later if the clinic needs to support remote access.
 
+## Run with Docker
+
+The quickest way to run the whole system is [Docker Desktop](https://www.docker.com/products/docker-desktop/). It starts PostgreSQL, the API and the web app, so Python, PostgreSQL and Node.js don't need to be installed.
+
+1. Copy the settings file and replace every `change-this-password`. Account passwords need at least 12 characters, and the password in `CLINIC_DATABASE_URL` must match `POSTGRES_PASSWORD`:
+
+   ```bash
+   cp .env.docker.example .env.docker
+   ```
+
+2. Build and start everything:
+
+   ```bash
+   docker compose up --build
+   ```
+
+3. Open http://localhost:8080 for the website and http://localhost:8080/staff for the staff portal.
+
+To add the demo doctors and patients, run `docker compose exec api python -m app.db.demo_data` while the system is running. Stop it with `docker compose down`. The database is kept in a Docker volume between runs, and `docker compose down -v` deletes it.
+
+The chat assistant uses Ollama running on your computer (see step 7 below). To run the model inside Docker instead, set `CLINIC_CHATBOT_BASE_URL=http://ollama:11434` in `.env.docker`, start with `docker compose --profile chat up --build`, and download the model once with `docker compose exec ollama ollama pull llama3.2:1b`.
+
+This setup is for running the system on one computer. It serves plain HTTP on port 8080 and isn't yet set up for a public server.
+
 ## Run the application locally
 
 ### 1. Install Python and PostgreSQL
