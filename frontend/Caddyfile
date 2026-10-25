@@ -1,0 +1,15 @@
+:80 {
+	encode gzip
+
+	# API requests go to the backend container.
+	handle /api/* {
+		reverse_proxy api:8000
+	}
+
+	# Everything else is the React app; unknown paths load index.html for client-side routing.
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}
