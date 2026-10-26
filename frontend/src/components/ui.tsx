@@ -31,6 +31,18 @@ export function Button({
   );
 }
 
+// The CareFlow cross, used in the site header (with its pulse dot) and the chat window.
+export function BrandMark({ pulse = true }: { pulse?: boolean }) {
+  return (
+    <span className="brand-mark">
+      <svg viewBox="0 0 64 64" aria-hidden>
+        <path d="M27 14h10v13h13v10H37v13H27V37H14V27h13z" fill="currentColor" />
+      </svg>
+      {pulse && <i className="brand-pulse" />}
+    </span>
+  );
+}
+
 export function Spinner({ label = "Loading…" }: { label?: string }) {
   return (
     <div className="spinner-wrap">

@@ -19,19 +19,14 @@ import {
 } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { useStaffTheme, type ThemePreference } from "../lib/theme";
-import { Avatar, Spinner } from "./ui";
+import { Avatar, BrandMark, Spinner } from "./ui";
 import { ChatWidget } from "./ChatWidget";
 import { SiteFooter } from "./SiteFooter";
 
 export function Brand({ to = "/" }: { to?: string }) {
   return (
     <Link to={to} className="brand">
-      <span className="brand-mark">
-        <svg viewBox="0 0 64 64" aria-hidden>
-          <path d="M27 14h10v13h13v10H37v13H27V37H14V27h13z" fill="currentColor" />
-        </svg>
-        <i className="brand-pulse" />
-      </span>
+      <BrandMark />
       <span className="brand-text">
         Care<b>Flow</b>
       </span>
@@ -58,7 +53,6 @@ export function PublicLayout() {
               Home
             </NavLink>
             <NavLink to="/doctors">Doctors</NavLink>
-            <NavLink to="/book">Book a visit</NavLink>
             <NavLink to="/live">Live queue</NavLink>
             <NavLink to="/manage">Manage booking</NavLink>
             {user?.role === "patient" && <NavLink to="/my-bookings">My bookings</NavLink>}

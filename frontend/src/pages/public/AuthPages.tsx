@@ -1,13 +1,47 @@
 import { useState, type FormEvent, type ReactNode } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
-import { LogIn, UserPlus, Lock, UserRound, HeartPulse, ShieldCheck, CalendarCheck2 } from "lucide-react";
+import {
+  LogIn,
+  UserPlus,
+  Lock,
+  UserRound,
+  HeartPulse,
+  ShieldCheck,
+  CalendarCheck2,
+  CalendarClock,
+  type LucideIcon,
+} from "lucide-react";
 import { api } from "../../lib/api";
 import { homePathFor, useAuth } from "../../lib/auth";
 import { Button, ErrorNote, Field } from "../../components/ui";
 import { useToast } from "../../components/Toast";
 
-function AuthShell({ title, subtitle, children }: { title: string; subtitle: string; children: ReactNode }) {
+type Highlight = { icon: LucideIcon; text: string };
+
+const SIGN_IN_HIGHLIGHTS: Highlight[] = [
+  { icon: CalendarCheck2, text: "Live queues and today's appointments at a glance" },
+  { icon: ShieldCheck, text: "Role-based access for doctors and administrators" },
+  { icon: UserRound, text: "Patients can keep all their bookings in one place" },
+];
+
+const SIGN_UP_HIGHLIGHTS: Highlight[] = [
+  { icon: CalendarCheck2, text: "See all your bookings in one place" },
+  { icon: CalendarClock, text: "Reschedule or cancel without a booking code" },
+  { icon: ShieldCheck, text: "We never ask for symptoms or medical details" },
+];
+
+function AuthShell({
+  title,
+  subtitle,
+  highlights,
+  children,
+}: {
+  title: string;
+  subtitle: string;
+  highlights: Highlight[];
+  children: ReactNode;
+}) {
   return (
     <div className="auth-page">
       <div className="auth-art">
@@ -15,15 +49,11 @@ function AuthShell({ title, subtitle, children }: { title: string; subtitle: str
           <HeartPulse size={40} />
           <h2>Care that runs on time.</h2>
           <ul>
-            <li>
-              <CalendarCheck2 size={18} /> Live queues and today's appointments at a glance
-            </li>
-            <li>
-              <ShieldCheck size={18} /> Role-based access for doctors and administrators
-            </li>
-            <li>
-              <UserRound size={18} /> Patients can keep all their bookings in one place
-            </li>
+            {highlights.map(({ icon: Icon, text }) => (
+              <li key={text}>
+                <Icon size={18} /> {text}
+              </li>
+            ))}
           </ul>
         </div>
       </div>
@@ -57,7 +87,11 @@ export function LoginPage() {
   if (user && !mutation.isPending) return <Navigate to={homePathFor(user)} replace />;
 
   return (
-    <AuthShell title="Welcome back" subtitle="Sign in to the staff portal or your patient account.">
+    <AuthShell
+      title="Sign in"
+      subtitle="Enter your username and password to continue."
+      highlights={SIGN_IN_HIGHLIGHTS}
+    >
       <form
         className="stack"
         onSubmit={(event: FormEvent) => {
@@ -98,8 +132,9 @@ export function LoginPage() {
         </Button>
       </form>
       <p className="auth-switch muted">
-        New patient? <Link to="/register">Create an account</Link> to keep your bookings together. You can also{" "}
-        <Link to="/book">book without an account</Link>.
+        Don't have an account? <Link to="/register">Create one</Link> (patients only).
+        <br />
+        Staff accounts are set up by the clinic admin.
       </p>
     </AuthShell>
   );
@@ -128,7 +163,11 @@ export function RegisterPage() {
   if (user && !mutation.isPending) return <Navigate to={homePathFor(user)} replace />;
 
   return (
-    <AuthShell title="Create a patient account" subtitle="Optional: keep every booking you make in one place.">
+    <AuthShell
+      title="Create a patient account"
+      subtitle="Keep your bookings together. You can still book without an account."
+      highlights={SIGN_UP_HIGHLIGHTS}
+    >
       <form
         className="stack"
         onSubmit={(event: FormEvent) => {
@@ -174,7 +213,7 @@ export function RegisterPage() {
         </Button>
       </form>
       <p className="auth-switch muted">
-        Already registered? <Link to="/login">Sign in</Link>
+        Already have an account? <Link to="/login">Sign in</Link>
       </p>
     </AuthShell>
   );

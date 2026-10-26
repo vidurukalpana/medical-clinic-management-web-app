@@ -95,9 +95,7 @@ export function LivePage() {
           <span className="live-dot" /> Live queue
         </span>
         <h1>Who's being seen now</h1>
-        <p className="muted">
-          {live.data ? `${formatDay(live.data.day)}. ` : ""}Updates every 20 seconds. We show numbers only, never names.
-        </p>
+        {live.data && <p className="muted">{formatDay(live.data.day)}</p>}
       </div>
 
       {live.isLoading ? (

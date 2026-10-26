@@ -23,7 +23,7 @@
 - A pharmacy is next door.
 
 ## Booking a visit
-- Patients book on the website using the "Book a visit" page.
+- Patients book on the website using the "Book now" button at the top of every page.
 - Booking needs only a name and phone number, plus a doctor and a date. If the doctor has two sessions that day, the patient also picks one.
 - An account is not required. Patients can optionally create an account to see their bookings on the "My bookings" page.
 - Each doctor sees a set number of patients per session. A booking gives the patient a number in that session, for example No. 7.
