@@ -706,18 +706,7 @@ textarea.input {
   flex-direction: column;
   min-width: 0;
 }
-.chat-head small {
-  color: var(--text-3);
-  font-size: 0.78rem;
-}
-.chat-avatar {
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  background: var(--primary);
-  color: #fff;
+.chat-head .brand-mark {
   flex-shrink: 0;
 }
 .chat-log {
@@ -773,12 +762,6 @@ textarea.input {
 }
 .chat-send {
   padding: 10px 14px;
-}
-.chat-note {
-  margin: 0;
-  padding: 0 14px 12px;
-  font-size: 0.74rem;
-  color: var(--text-3);
 }
 @media (max-width: 560px) {
   .chat-widget {
@@ -1315,6 +1298,9 @@ textarea.input {
   flex-shrink: 0;
   margin-top: 2px;
   color: var(--primary);
+}
+.footer-col svg.whatsapp-icon {
+  color: #25d366;
 }
 .footer-line {
   display: block;
