@@ -21,9 +21,13 @@ docker run -d --name careflow-demo-api --network careflow_default --env-file "$R
   careflow-api:latest sh -c "pip install --user --quiet time-machine && python run_shifted.py" >/dev/null
 until curl -sf localhost:8001/api/health >/dev/null; do sleep 1; done
 
+# Book today's demo patients (the seeder skips sessions already past when it ran), then keep that as each take's start.
+python3 seed_today.py "$ROOT/.env.docker"
+docker exec careflow-db-1 sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > start-of-take.dump
+
 # The small chat model sometimes gets a detail wrong; record.js checks each answer and exits with 2 if one is off.
 for attempt in 1 2 3 4 5 6 7 8; do
-  docker exec -i careflow-db-1 sh -c 'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --clean --if-exists --single-transaction' < before-demo.dump
+  docker exec -i careflow-db-1 sh -c 'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --clean --if-exists --single-transaction' < start-of-take.dump
   code=0; node record.js "$ROOT/.env.docker" take || code=$?
   [ $code -eq 0 ] && break
   [ $code -ne 2 ] && exit $code
@@ -37,5 +41,5 @@ if [ ! -f "$MUSIC" ]; then
   curl -sfL -A "CareFlowDemo/1.0" -o "$MUSIC" \
     "https://upload.wikimedia.org/wikipedia/commons/3/38/Rafael_Krux_-_Inspiring_Advertising_-_Upbeat_Summer_Corporate_%28cc-by%29_%28filmmusic%29.mp3"
 fi
-node render.js take "$OUT" 1.1 "$MUSIC"
+node render.js take "$OUT" 1.0 "$MUSIC"
 echo "Video saved to $OUT"
