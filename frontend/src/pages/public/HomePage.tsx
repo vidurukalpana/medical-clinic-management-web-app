@@ -7,7 +7,6 @@ import {
   ArrowRight,
   KeyRound,
   Stethoscope,
-  HeartPulse,
 } from "lucide-react";
 import type { PublicDoctor } from "../../lib/api";
 import { useNextAvailable, usePublicDoctors } from "../../lib/hooks";
@@ -32,15 +31,11 @@ export function HomePage() {
         <div className="hero-glow" />
         <div className="container hero-inner">
           <div className="hero-copy">
-            <span className="eyebrow">
-              <HeartPulse size={14} /> Care, right on time
-            </span>
             <h1>
               Skip the waiting room.
               <br />
               <span className="gradient-text">See your doctor on time.</span>
             </h1>
-            <p className="lead">Book in under a minute. We'll be ready when you arrive.</p>
             <div className="hero-cta">
               <Link to="/book" className="btn btn-accent btn-lg">
                 <CalendarPlus size={18} /> Book an appointment
@@ -57,7 +52,7 @@ export function HomePage() {
 
       <section className="container section">
         <div className="section-head">
-          <span className="eyebrow">How it works</span>
+          <span className="eyebrow">How booking works</span>
           <h2>Three simple steps</h2>
         </div>
         <div className="steps">

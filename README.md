@@ -283,7 +283,7 @@ Tokens are scoped to a single booking and expire 24 hours after its current end 
   "phone": "+94 11 234 5678",
   "whatsapp": "+94 77 123 4567",
   "email": "hello@careflowclinic.lk",
-  "reception_hours": "Monday to Friday, 8:00 to 18:00",
+  "reception_hours": "Monday to Friday, 8:00 AM to 8:00 PM",
   "closed_days": "Closed on weekends and public holidays",
   "emergency_number": "1990"
 }
@@ -293,7 +293,7 @@ The details are stored in [`app/content/clinic_contact.json`](app/content/clinic
 
 ## Website chat assistant
 
-The public site has an **Ask a question** button that opens a chat assistant. It only answers questions. It cannot book, cancel or reschedule appointments, and it points people to the **Book a visit** and **Manage booking** pages instead.
+The public site has an **Ask a question** button that opens a chat assistant. It only answers questions. It cannot book, cancel or reschedule appointments, and it points people to the **Book now** button and the **Manage booking** page instead.
 
 `POST /api/chatbot/messages` needs no login. Send the conversation so far, ending with the user's question:
 
@@ -314,7 +314,7 @@ What the assistant knows:
 - Active doctors' names, their weekly consultation hours, and their unavailable periods over the next 14 days. These are read from the database for every question. Unavailability reasons and registration numbers are left out.
 - Today's date in `CLINIC_TIMEZONE`.
 
-It never sees patient records, appointments, queues or booking codes. Conversations are not stored on the server; the browser keeps them only until the page is closed. The model is told to refuse medical advice and to direct emergencies to emergency services. A small model can still make mistakes, so the chat window says that answers may be wrong.
+It never sees patient records, appointments, queues or booking codes. Conversations are not stored on the server; the browser keeps them only until the page is closed. The model is told to refuse medical advice and to direct emergencies to emergency services.
 
 Configure the model in `.env`:
 

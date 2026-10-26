@@ -1,12 +1,16 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Bot, Loader2, MessageCircle, Send, X } from "lucide-react";
+import { Loader2, MessageCircle, Send, X } from "lucide-react";
 import { api, type ChatMessage } from "../lib/api";
+import { BrandMark } from "./ui";
 
 // Matches the backend limits in app/schemas/chatbot.py.
 const MAX_MESSAGE_LENGTH = 1000;
 const MAX_HISTORY_MESSAGES = 20;
 
-const SUGGESTIONS = ["What are the consultation hours?", "How do I book a visit?", "How do I cancel a booking?"];
+// Keep in sync with ASSISTANT_NAME in app/services/chatbot.py.
+const ASSISTANT_NAME = "Flo";
+
+const SUGGESTIONS = ["What are the consultation hours?", "How do I book an appointment?", "How do I cancel a booking?"];
 
 // Question-only assistant for the public site. The conversation lives in memory
 // and is gone when the page is closed.
@@ -54,14 +58,11 @@ export function ChatWidget() {
   return (
     <div className="chat-widget">
       {open && (
-        <section className="chat-panel" role="dialog" aria-label="Clinic assistant">
+        <section className="chat-panel" role="dialog" aria-label={`Chat with ${ASSISTANT_NAME}`}>
           <header className="chat-head">
-            <span className="chat-avatar">
-              <Bot size={18} />
-            </span>
+            <BrandMark pulse={false} />
             <div>
-              <strong>Clinic assistant</strong>
-              <small>Answers questions about the clinic and booking</small>
+              <strong>{ASSISTANT_NAME}</strong>
             </div>
             <button className="icon-btn" onClick={() => setOpen(false)} aria-label="Close chat">
               <X size={18} />
@@ -70,8 +71,7 @@ export function ChatWidget() {
 
           <div className="chat-log" ref={logRef} aria-live="polite">
             <p className="chat-bubble is-assistant">
-              Hi! Ask me about our doctors, consultation hours or how booking works. I can't book or change
-              appointments, and I can't give medical advice.
+              Hi, I'm {ASSISTANT_NAME}! Ask me about our doctors, consultation hours or how booking works.
             </p>
             {messages.length === 0 && (
               <div className="chat-suggestions">
@@ -109,7 +109,6 @@ export function ChatWidget() {
               <Send size={16} />
             </button>
           </form>
-          <p className="chat-note">AI answers may be wrong. Please don't share medical details or booking codes.</p>
         </section>
       )}
       <button
