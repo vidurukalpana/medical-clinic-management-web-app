@@ -4,6 +4,8 @@
 import aws_cdk as cdk
 
 from config import load_config
+from stacks.database import DatabaseStack
+from stacks.network import NetworkStack
 from stacks.security import SecurityStack
 
 config = load_config()
@@ -13,5 +15,7 @@ cdk.Tags.of(app).add("Project", "CareFlow")
 
 # Stacks in build order: security, network, database, api, website, monitoring.
 security = SecurityStack(app, "CareFlow-Security", env=env, config=config)
+network = NetworkStack(app, "CareFlow-Network", env=env)
+database = DatabaseStack(app, "CareFlow-Database", env=env, vpc=network.vpc, database_sg=network.database_sg)
 
 app.synth()
