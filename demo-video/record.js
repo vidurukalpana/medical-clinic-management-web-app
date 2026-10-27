@@ -2,7 +2,7 @@
 // Usage: node record.js <path to .env.docker> <out dir>
 const fs = require("fs");
 const path = require("path");
-const { BASE, openBrowser, readEnv } = require("./common");
+const { BASE, VIEWPORT, openBrowser, readEnv } = require("./common");
 
 const env = readEnv(process.argv[2]);
 const OUT = process.argv[3] || "take";
@@ -14,7 +14,7 @@ const marks = [];    // {ts, kind, value}
 const now = () => Date.now() / 1000;
 const mark = (kind, value) => { marks.push({ ts: now(), kind, value }); console.log(`[${(now() - T0).toFixed(1)}s] ${kind} ${value ?? ""}`); };
 let T0 = now();
-let page, mouse = { x: 960, y: 540 };
+let page, mouse = { x: VIEWPORT.width / 2, y: VIEWPORT.height / 2 };
 
 const wait = (ms) => page.waitForTimeout(ms);
 const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
@@ -74,10 +74,33 @@ async function card(opts, hold = 1900) {
 async function hideCard() { await page.evaluate(() => window.__demo.hideCard()); await wait(450); }
 async function nav(name) { await click(page.locator(".topnav-links").getByRole("link", { name, exact: true })); }
 async function side(name) { await click(page.locator(".sidebar").getByRole("link", { name, exact: true })); await wait(500); }
+// Full page loads briefly show a spinner and the fallback font before Plus Jakarta Sans arrives,
+// so render.js cuts from the navigation to the moment the page is ready.
+async function load(url, ready) {
+  const start = now();
+  await page.goto(url);
+  await ready();
+  await page.evaluate(() => document.fonts.ready);
+  await wait(200);
+  mark("cut", start + 0.05);
+}
+
 // A section starts with a title card naming the feature; the page underneath changes while it is up.
-async function section(title, prepare) {
-  await card({ title });
-  if (prepare) await prepare();
+// The card is still by then, so render.js cuts any slow page load out of the hold.
+async function section(title, prepare, opts = {}) {
+  await card({ title, ...opts });
+  if (prepare) {
+    const start = now();
+    await page.evaluate(() => { window.__samePage = true; });
+    await prepare();
+    // A full page load redraws the card in the fallback font until Plus Jakarta Sans arrives,
+    // so cut from the start of the load until the font is back. Other slow steps just get trimmed.
+    if (!(await page.evaluate(() => window.__samePage))) {
+      await page.evaluate(() => document.fonts.ready);
+      await wait(400);
+      mark("cut", start);
+    } else if (now() - start > 0.8) { await wait(300); mark("cut", start + 0.3); }
+  }
   await hideCard();
 }
 
@@ -103,8 +126,8 @@ async function section(title, prepare) {
   await cdp.send("Page.startScreencast", { format: "jpeg", quality: 92, maxWidth: 1920, maxHeight: 1080, everyNthFrame: 1 });
   T0 = now();
   mark("start");
-  await page.mouse.move(1900, 1070);
-  mouse = { x: 1900, y: 1070 };
+  mouse = { x: VIEWPORT.width - 20, y: VIEWPORT.height - 10 };
+  await page.mouse.move(mouse.x, mouse.y);
   await wait(700);
   await card({ logo: true, sub: "Skip the waiting room, See your Doctor on time" }, 4300);
   await hideCard();
@@ -119,11 +142,20 @@ async function section(title, prepare) {
 
   // ---- Home page ----
   await caption("A simple home page");
-  await wait(1600);
-  await scrollTo(620, 800); await wait(1000);
-  await scrollTo(1000, 700); await wait(1000);
-  await scrollTo(1500, 700); await wait(900);
-  await scrollTo(0, 700);
+  // Paced to finish just before 0:15; the wait below lands the next section on the beat.
+  await point(page.locator(".hero h1"), 500); await wait(250);
+  await point(page.getByRole("link", { name: "Book an appointment" }), 400); await wait(450);
+  // "How booking works" with its title in view, then further down and back up.
+  const howHead = page.locator(".section-head").first();
+  await scrollTo(await howHead.evaluate((el) => scrollY + el.getBoundingClientRect().top - 110), 700);
+  const steps = page.locator(".step-card");
+  for (const step of await steps.all()) { await point(step, 300); await wait(200); }
+  await scrollTo(1300, 750); await moveTo(920, 390, 350); await wait(250);
+  await scrollTo(0, 750); await wait(150);
+  // The first section starts at 0:15 in the video, where the music lifts.
+  const untilBeat = 15.0 - (now() - T0);
+  if (untilBeat > 0) await wait(untilBeat * 1000);
+  else console.log(`home page ran ${(-untilBeat).toFixed(1)}s past 0:15`);
 
   // ---- Find the right doctor ----
   await section(["Find the right", "doctor"]);
@@ -140,9 +172,9 @@ async function section(title, prepare) {
   }
 
   // ---- Booking ----
-  await section(["Book a visit in", "under a minute"], async () => { await scrollTo(0, 10); });
+  await section(["Book an appointment", "in under a minute"], async () => { await scrollTo(0, 10); }, { stacked: true });
   await caption("Pick a doctor");
-  await nav("Book a visit");
+  await click(page.locator(".topnav").getByRole("link", { name: "Book now" }));
   await type(page.getByLabel("Search doctors"), "General", 55);
   await click(page.locator("button.choice").filter({ hasText: "Kasun" }), { pause: 500 });
   await caption("Pick a day and session");
@@ -157,12 +189,14 @@ async function section(title, prepare) {
   await page.getByRole("heading", { name: "You're booked!" }).waitFor({ timeout: 30000 });
   await caption("Booked, with a check-in QR code");
   mark("booked");
-  const checkinCode = await page.evaluate(() => {
-    const el = document.querySelector(".checkin-qr figcaption strong");
-    return el ? el.textContent.trim() : null;
-  });
-  await wait(1300);
-  await scrollTo(380, 800); await wait(1300);
+  const codeEl = page.locator(".checkin-qr figcaption strong");
+  const checkinCode = (await codeEl.textContent()).trim();
+  await wait(1100);
+  await caption("Copy the code for reception");
+  const copyBtn = page.getByRole("button", { name: "Copy code" });
+  await copyBtn.evaluate((el) => el.scrollIntoView({ block: "center", behavior: "smooth" }));
+  await wait(700);
+  await click(copyBtn, { ms: 500, pause: 1600 });
 
   // ---- Live queue ----
   await section(["Follow the", "live queue"], async () => { await scrollTo(0, 10); });
@@ -172,30 +206,51 @@ async function section(title, prepare) {
   await wait(1800);
 
   // ---- AI assistant ----
-  await section(["Ask the", "AI clinic assistant"]);
-  await caption("A real conversation");
-  await click(page.getByRole("button", { name: "Ask a question" }), { pause: 200 });
-  await page.evaluate(() => window.__demo.chatFocus(true));
-  await wait(800);
-  // One natural conversation. Each answer is checked, because a small local model sometimes gets details wrong.
+  await section(["Meet Flo:", "Ask AI Clinic Assistant"], null, { oneLine: true });
+  // One natural conversation where each answer adds something new. Every answer is checked, because a small
+  // local model sometimes gets details wrong or answers ahead (e.g. gives the hours when asked who the doctor is).
+  const HOURS = /Monday|Wednesday|17:00|20:00|5:00|8:00|[58] ?PM/i;
+  const FEE = /2,?500|\bRs\b|\bfee\b/i;
   const QUESTIONS = [
-    ["Hi! I would like to bring my daughter to see a doctor. Who is the paediatrician?", (r) => /Ayesha/.test(r) && !/contact|reception|phone|call|email/i.test(r)],
-    ["What are Dr. Ayesha Fernando's consultation hours?", (r) => /Monday/.test(r) && /Wednesday/.test(r) && /17:00|5:00|5 ?PM/i.test(r) && !/Tuesday|Thursday|Friday|Saturday|Sunday|also|separate|not listed/i.test(r)],
-    ["How much is the consultation fee?", (r) => /2,?500/.test(r) && !/Ruwan|Priya|Kasun|also/i.test(r)],
-    ["Do I need an account to book?", (r) => /\bno\b|don't need|do not need|not need/i.test(r) && !/phone|sent|email|SMS|call/i.test(r)],
-    ["Great, thank you!", (r) => r.length > 0],
+    ["Hi! I would like to bring my daughter to see a doctor. Who is the paediatrician?", (r) => /Ayesha/.test(r) && !HOURS.test(r) && !FEE.test(r) && !/contact|reception|phone|call|email/i.test(r)],
+    ["What are Dr. Ayesha Fernando's consultation hours?", (r) => /Monday/.test(r) && /Wednesday/.test(r) && /17:00|5:00|5 ?PM/i.test(r) && !FEE.test(r) && !/Tuesday|Thursday|Friday|Saturday|Sunday|also|separate|not listed/i.test(r)],
+    ["How much is the consultation fee?", (r) => /2,?500/.test(r) && !HOURS.test(r) && !/Ruwan|Priya|Kasun|also/i.test(r)],
+    ["How can I book an appointment with Dr. Ayesha?", (r) => /Book now/i.test(r) && !HOURS.test(r) && !FEE.test(r) && !/phone|sent|email|SMS|call|contact|reception|account/i.test(r)],
+    ["Great, thank you!", (r) => r.length > 0 && !HOURS.test(r) && !FEE.test(r)],
   ];
-  const answers = page.locator(".chat-bubble.is-assistant:not(.chat-typing)");
-  for (const [i, [question, isRight]] of QUESTIONS.entries()) {
-    await type(page.getByLabel("Your question"), question, 28);
-    await page.keyboard.press("Enter");
-    mark("fast", 10);
-    await page.waitForFunction((n) => document.querySelectorAll(".chat-bubble.is-assistant:not(.chat-typing)").length >= n && !document.querySelector(".chat-typing"), i + 2, { timeout: 180000 });
-    mark("fast", 1);
-    const reply = await answers.nth(i + 1).innerText();
-    mark("chat", `${question} -> ${reply}`);
-    if (!isRight(reply)) throw new Error(`CHAT_CHECK_FAILED: ${question}`);
-    await wait(Math.min(3600, 1300 + reply.length * 16));
+  // A wrong answer only redoes the conversation: the page is reset and render.js cuts the failed attempt out.
+  for (let attempt = 1; ; attempt++) {
+    const attemptStart = now();
+    const pos = { ...mouse };
+    let failed = null;
+    await caption("A real conversation");
+    await click(page.getByRole("button", { name: "Ask a question" }), { pause: 200 });
+    await page.evaluate(() => window.__demo.chatFocus(true));
+    await wait(800);
+    const answers = page.locator(".chat-bubble.is-assistant:not(.chat-typing)");
+    for (const [i, [question, isRight]] of QUESTIONS.entries()) {
+      await type(page.getByLabel("Your question"), question, 28);
+      await page.keyboard.press("Enter");
+      mark("fast", 10);
+      await page.waitForFunction((n) => document.querySelectorAll(".chat-bubble.is-assistant:not(.chat-typing)").length >= n && !document.querySelector(".chat-typing"), i + 2, { timeout: 180000 });
+      mark("fast", 1);
+      const reply = await answers.nth(i + 1).innerText();
+      mark("chat", `${question} -> ${reply}`);
+      if (!isRight(reply)) { failed = question; break; }
+      await wait(Math.min(3600, 1300 + reply.length * 16));
+    }
+    if (!failed) break;
+    if (attempt >= 12) throw new Error(`CHAT_CHECK_FAILED: ${failed}`);
+    console.log(`chat answer off (${failed}), redoing the conversation`);
+    await caption(null);
+    await page.evaluate(() => window.__demo.chatFocus(false));
+    await page.reload();
+    await page.getByRole("heading", { name: "Who's being seen now" }).waitFor();
+    await page.locator(".live-board, .card").first().waitFor().catch(() => {});
+    await page.evaluate(() => document.fonts.ready);
+    await moveTo(pos.x, pos.y, 100);
+    await wait(600);
+    mark("cut", attemptStart);
   }
   await page.evaluate(() => window.__demo.chatFocus(false));
   await wait(500);
@@ -208,6 +263,7 @@ async function section(title, prepare) {
     await page.getByLabel("Username").waitFor();
   });
   await caption("Staff sign in");
+  await moveTo(450, 420, 600); await wait(1100);
   await type(page.getByLabel("Username"), env.CLINIC_ADMIN_USERNAME, 50);
   await click(page.getByLabel("Password"), { pause: 60 });
   await page.getByLabel("Password").pressSequentially(env.CLINIC_ADMIN_PASSWORD, { delay: 25 });
@@ -227,14 +283,13 @@ async function section(title, prepare) {
     await click(page.locator(".dash-appointments, .card").getByRole("button", { name: "Check in" }).first(), { pause: 800 });
   }
 
-  await caption("Or scan their QR code");
+  await caption("Or paste the patient's code");
   await scrollTo(0, 500);
   await click(page.getByRole("button", { name: /Scan check-in/ }), { pause: 400 });
-  if (checkinCode) {
-    await type(page.getByLabel("Check-in code"), checkinCode, 25);
-  } else {
-    mark("warn", "no check-in code captured");
-  }
+  await click(page.getByLabel("Check-in code"), { pause: 300 });
+  // Shows as a paste; the text is inserted directly so it doesn't depend on the system clipboard.
+  await page.keyboard.insertText(checkinCode);
+  await wait(700);
   await page.keyboard.press("Enter");
   await click(page.getByRole("button", { name: /^Check in No\./ }), { pause: 1000 });
   if (!page.url().endsWith("/staff")) { await side("Dashboard"); }
@@ -248,13 +303,12 @@ async function section(title, prepare) {
   await click(page.getByRole("button", { name: "Start" }).first(), { pause: 1200 });
 
   await caption("The public queue updates");
-  await page.goto(BASE + "/live");
-  await page.getByRole("heading", { name: "Who's being seen now" }).waitFor();
+  await load(BASE + "/live", () => page.getByText("Now seeing").first().waitFor());
   await wait(1900);
 
   // ---- Appointments, patients, schedules ----
   await section(["Appointments, patients", "and schedules"], async () => {
-    await page.goBack();
+    await page.goto(BASE + "/staff");
     await page.locator(".stat-value").first().waitFor({ timeout: 20000 });
   });
   await caption("Find, move or cancel bookings");
@@ -278,6 +332,7 @@ async function section(title, prepare) {
   await caption("Staff and patient accounts");
   await side("Accounts"); await wait(1100);
   await caption("SMS outbox");
+  await page.evaluate(() => window.__demo.blurCodes(true));
   await side("SMS outbox"); await wait(1100);
 
   // ---- Doctor portal ----
@@ -289,6 +344,7 @@ async function section(title, prepare) {
     await page.getByLabel("Username").waitFor();
   });
   await caption("Doctors sign in");
+  await wait(500);
   await type(page.getByLabel("Username"), "demo.kasun", 50);
   await click(page.getByLabel("Password"), { pause: 60 });
   await page.getByLabel("Password").pressSequentially(JSON.parse(env.CLINIC_DEMO_DOCTOR_PASSWORDS)["demo.kasun"], { delay: 25 });
@@ -307,16 +363,22 @@ async function section(title, prepare) {
   await caption("Edit their profile");
   await click(page.locator('.sidebar a[href="/staff/account"]').first(), { pause: 500 });
   const languages = page.getByLabel("Languages");
-  await click(languages, { pause: 80 });
-  await page.keyboard.press("End");
-  await languages.pressSequentially(", Tamil", { delay: 50 });
+  // Bring the field to the middle first, so the typing is seen rather than hidden by a jump.
+  await scrollTo(await languages.evaluate((el) => scrollY + el.getBoundingClientRect().top - innerHeight / 2), 800);
+  await wait(400);
+  await click(languages, { pause: 300 });
+  // Put the caret at the end directly: on macOS the End key scrolls the whole page instead.
+  await languages.evaluate((el) => el.setSelectionRange(el.value.length, el.value.length));
+  await languages.pressSequentially(", Tamil", { delay: 140 });
+  await wait(700);
   await click(page.getByRole("button", { name: "Save profile" }), { pause: 1100 });
 
   await caption("Live on the website");
-  await page.goto(BASE + "/doctors");
   const kasunCard = page.locator(".doctor-card").filter({ hasText: "Kasun" }).first();
-  await kasunCard.waitFor({ timeout: 15000 });
-  await kasunCard.evaluate((el) => el.scrollIntoView({ block: "center" }));
+  await load(BASE + "/doctors", async () => {
+    await kasunCard.waitFor({ timeout: 15000 });
+    await kasunCard.evaluate((el) => el.scrollIntoView({ block: "center" }));
+  });
   await wait(300);
   await point(kasunCard.getByText("Tamil").first(), 400);
   await wait(1500);

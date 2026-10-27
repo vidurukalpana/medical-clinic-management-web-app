@@ -8,7 +8,13 @@ const ffmpeg = require("ffmpeg-static");
 // An optional music file is repeated with crossfades to the video's length; without one, music.js composes a track.
 const [take, out, globalSpeedArg, musicFile] = process.argv.slice(2);
 const GLOBAL = parseFloat(globalSpeedArg || "1");
-const { frames, marks } = JSON.parse(fs.readFileSync(path.join(take, "timeline.json"), "utf8"));
+const timeline = JSON.parse(fs.readFileSync(path.join(take, "timeline.json"), "utf8"));
+// "cut" marks drop a stretch (from the mark's value to its ts), e.g. a chat attempt that was redone.
+const cuts = timeline.marks.filter((m) => m.kind === "cut").map((m) => ({ from: m.value, to: m.ts }));
+const inCut = (ts) => cuts.some((c) => ts >= c.from && ts < c.to);
+const shift = (ts) => ts - cuts.filter((c) => c.to <= ts).reduce((sum, c) => sum + c.to - c.from, 0);
+const frames = timeline.frames.filter((f) => !inCut(f.ts)).map((f) => ({ ...f, ts: shift(f.ts) }));
+const marks = timeline.marks.filter((m) => m.kind !== "cut" && !inCut(m.ts)).map((m) => ({ ...m, ts: shift(m.ts) }));
 const end = marks.find((m) => m.kind === "end").ts + 0.3;
 
 // Speed changes, from "fast" marks (value = speed factor from that moment on).

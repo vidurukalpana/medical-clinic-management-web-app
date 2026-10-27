@@ -14,12 +14,19 @@ function readEnv(path) {
   );
 }
 
+// Pages are laid out at a laptop-sized viewport (like a 14" MacBook) and captured at 1920x1080,
+// so the site looks the way it does in a normal browser rather than spread across a wide screen.
+const VIEWPORT = { width: 1536, height: 864 };
+
 async function openBrowser({ record } = {}) {
-  const browser = await chromium.launch({ channel: "chrome", args: ["--hide-scrollbars", "--window-size=1920,1080"] });
+  const scale = 1920 / VIEWPORT.width;
+  // The screencast only captures at the device scale when Chrome itself is started with it.
+  const browser = await chromium.launch({ channel: "chrome", args: ["--hide-scrollbars", `--window-size=${VIEWPORT.width},${VIEWPORT.height}`, `--force-device-scale-factor=${scale}`] });
   const ctx = await browser.newContext({
-    viewport: { width: 1920, height: 1080 },
-    deviceScaleFactor: 1,
+    viewport: VIEWPORT,
+    deviceScaleFactor: scale,
     colorScheme: "light",
+    permissions: ["clipboard-read", "clipboard-write"],
     ...(record ? { recordVideo: { dir: record, size: { width: 1920, height: 1080 } } } : {}),
   });
   await ctx.clock.install({ time: DEMO_START });
@@ -30,10 +37,17 @@ async function openBrowser({ record } = {}) {
     const target = SHIFTED_API + url.pathname + url.search;
     const headers = { ...route.request().headers() };
     delete headers.host;
-    const response = await route.fetch({ url: target, headers, timeout: 120000 });
-    await route.fulfill({ response });
+    // Retry once: the API copy occasionally drops a connection, and an unhandled error here ends the take.
+    for (let attempt = 1; ; attempt++) {
+      try {
+        const response = await route.fetch({ url: target, headers, timeout: 120000 });
+        return await route.fulfill({ response });
+      } catch (e) {
+        if (attempt >= 2) return route.abort().catch(() => {});
+      }
+    }
   });
   return { browser, ctx };
 }
 
-module.exports = { BASE, openBrowser, readEnv };
+module.exports = { BASE, VIEWPORT, openBrowser, readEnv };

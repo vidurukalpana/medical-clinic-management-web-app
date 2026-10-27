@@ -3,13 +3,14 @@
 (() => {
   if (window.__demo) return;
   const css = `
-  #__cur{position:fixed;left:0;top:0;width:30px;height:30px;z-index:2147483639;pointer-events:none;
+  #__cur{position:fixed;left:0;top:0;width:24px;height:24px;z-index:2147483639;pointer-events:none;
     transform:translate(-4px,-3px);transition:transform .08s;filter:drop-shadow(0 3px 6px rgba(0,0,0,.35))}
   #__cur.down{transform:translate(-4px,-3px) scale(.86)}
   .__ripple{position:fixed;width:16px;height:16px;margin:-8px 0 0 -8px;border-radius:50%;z-index:2147483638;pointer-events:none;
     border:3px solid rgba(249,115,22,.95);animation:__rip .55s ease-out forwards}
   @keyframes __rip{to{transform:scale(4.2);opacity:0}}
 
+  #__cap,#__card>*{zoom:.8}
   #__cap{position:fixed;left:50%;bottom:40px;transform:translate(-50%,24px);opacity:0;z-index:2147483637;pointer-events:none;
     font:700 30px/1.2 "Plus Jakarta Sans","Inter",system-ui,sans-serif;color:#0f172a;letter-spacing:-.01em;
     padding:18px 34px 18px 24px;border-radius:999px;display:flex;gap:16px;align-items:center;white-space:nowrap;
@@ -29,6 +30,7 @@
   #__card h1 .w{display:inline-block;opacity:0;transform:translateY(46px) scale(.96);filter:blur(10px);
     transition:opacity .55s ease, transform .7s cubic-bezier(.2,.9,.25,1.15), filter .55s ease}
   #__card h1 .w.a{background:linear-gradient(90deg,#0d9488,#6366f1);-webkit-background-clip:text;color:transparent}
+  #__card h1.one{font-size:84px;max-width:none;white-space:nowrap}
   #__card p{font-size:32px;color:#475569;margin:30px 0 0;text-align:center;max-width:1300px;
     opacity:0;transform:translateY(24px);transition:all .8s cubic-bezier(.2,.8,.2,1)}
   #__card .logo{display:flex;align-items:center;gap:26px;font-size:120px;font-weight:800;letter-spacing:-.035em;margin-bottom:30px}
@@ -48,16 +50,18 @@
     pointer-events:none;transition:opacity .6s ease}
   html.__chatfocus #__dim{opacity:1}
   .chat-widget{transition:transform .7s cubic-bezier(.2,.8,.2,1);transform-origin:100% 100%}
-  html.__chatfocus .chat-widget{z-index:2147483600!important;transform:scale(1.45)}
+  html.__chatfocus .chat-widget{z-index:2147483600!important;transform:scale(1.2)}
 
   /* Booking codes are private: keep the QR, check-in code and private code unreadable on video. */
   .checkin-qr-image{filter:blur(14px)}
   .checkin-qr figcaption strong,.token-box .token,input[aria-label="Check-in code"]{filter:blur(9px)}
+  .__codeblur{position:fixed;z-index:2147483000;pointer-events:none;border-radius:4px;
+    backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);background:rgba(255,255,255,.3)}
   `;
   const ss = (k, v) => { try { if (v === undefined) return sessionStorage.getItem(k); if (v === null) sessionStorage.removeItem(k); else sessionStorage.setItem(k, v); } catch {} };
 
   // Delays are set inline so each word or letter arrives one after another.
-  function cardHtml({ kicker = "", title = [], sub = "", logo = false, chips = [] }) {
+  function cardHtml({ kicker = "", title = [], sub = "", logo = false, chips = [], oneLine = false, stacked = false }) {
     let d = 0.15;
     let html = "";
     if (logo) {
@@ -72,12 +76,13 @@
     }
     if (kicker) { html += `<div class="k" style="transition-delay:${d.toFixed(2)}s">${kicker}</div>`; d += 0.15; }
     if (title.length) {
-      html += "<h1>";
+      html += oneLine ? '<h1 class="one">' : "<h1>";
       title.forEach((part, pi) => {
         for (const word of part.split(" ")) {
           html += `<span class="w${pi % 2 ? " a" : ""}" style="transition-delay:${d.toFixed(2)}s">${word}</span> `;
           d += 0.11;
         }
+        if (stacked && pi < title.length - 1) html += "<br>";
       });
       html += "</h1>";
       d += 0.1;
@@ -89,11 +94,42 @@
     return html;
   }
 
+  const CODE = /[A-Z0-9]{5}-[A-Z0-9]{5}/g;
+  let blurring = false;
+  function startCodeBlur() {
+    if (blurring) return;
+    blurring = true;
+    const boxes = [];
+    const frame = () => {
+      let used = 0;
+      if (ss("__blurCodes")) {
+        for (const cell of document.querySelectorAll(".sms-body")) {
+          const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
+          for (let node; (node = walker.nextNode()); ) {
+            for (const m of node.data.matchAll(CODE)) {
+              const range = document.createRange();
+              range.setStart(node, m.index); range.setEnd(node, m.index + m[0].length);
+              for (const r of range.getClientRects()) {
+                const box = boxes[used] || (boxes[used] = Object.assign(document.createElement("div"), { className: "__codeblur" }));
+                if (!box.isConnected) document.documentElement.appendChild(box);
+                Object.assign(box.style, { left: r.left - 3 + "px", top: r.top - 2 + "px", width: r.width + 6 + "px", height: r.height + 4 + "px", display: "block" });
+                used++;
+              }
+            }
+          }
+        }
+      }
+      for (let i = used; i < boxes.length; i++) boxes[i].style.display = "none";
+      requestAnimationFrame(frame);
+    };
+    frame();
+  }
+
   function mount() {
     if (document.getElementById("__cur")) return;
     const st = document.createElement("style"); st.textContent = css; document.documentElement.appendChild(st);
     const cur = document.createElement("div"); cur.id = "__cur";
-    cur.innerHTML = '<svg viewBox="0 0 24 24" width="30" height="30"><path d="M3 2l7.5 19 2.6-7.9L21 10.5z" fill="#0f172a" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg>';
+    cur.innerHTML = '<svg viewBox="0 0 24 24" width="24" height="24"><path d="M3 2l7.5 19 2.6-7.9L21 10.5z" fill="#0f172a" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg>';
     document.documentElement.appendChild(cur);
     const dim = document.createElement("div"); dim.id = "__dim"; document.documentElement.appendChild(dim);
     const cap = document.createElement("div"); cap.id = "__cap"; document.documentElement.appendChild(cap);
@@ -101,6 +137,7 @@
     const pos = JSON.parse(ss("__pos") || "[960,540]");
     cur.style.left = pos[0] + "px"; cur.style.top = pos[1] + "px";
     const c = ss("__cap"); if (c) { cap.innerHTML = "<i></i>" + c; cap.classList.add("on"); }
+    if (ss("__blurCodes")) startCodeBlur();
     const k = ss("__card"); if (k !== null && k !== undefined) { card.className = "instant on go"; card.innerHTML = k; }
     addEventListener("mousemove", (e) => { cur.style.left = e.clientX + "px"; cur.style.top = e.clientY + "px"; ss("__pos", JSON.stringify([e.clientX, e.clientY])); }, true);
     addEventListener("mousedown", (e) => {
@@ -134,6 +171,12 @@
       const card = document.getElementById("__card");
       card.className = "on go"; ss("__card", null);
       requestAnimationFrame(() => card.classList.remove("on"));
+    },
+    // Blurs check-in codes inside SMS texts with boxes drawn over them, leaving the page's own DOM alone.
+    // Runs every frame while on, so the boxes are there from the first frame the messages appear.
+    blurCodes(on) {
+      ss("__blurCodes", on ? "1" : null);
+      if (on) startCodeBlur();
     },
     chatFocus(on) { document.documentElement.classList.toggle("__chatfocus", on); },
   };
