@@ -4,7 +4,6 @@ from aws_cdk import Stack
 from aws_cdk import aws_ec2 as ec2
 from constructs import Construct
 
-API_PORT = 8000
 DATABASE_PORT = 5432
 
 
@@ -25,7 +24,8 @@ class NetworkStack(Stack):
         )
 
         # Security groups: each part accepts traffic only from the part in front of it.
-        # The load balancer's inbound rule (from CloudFront) is added with the website stack.
+        # Load balancer -> API rules are added by the API stack when it connects them, and
+        # CloudFront -> load balancer by the website stack.
         self.load_balancer_sg = ec2.SecurityGroup(
             self, "LoadBalancerSg", vpc=self.vpc, description="Internal load balancer", allow_all_outbound=False,
         )
@@ -36,6 +36,4 @@ class NetworkStack(Stack):
         self.database_sg = ec2.SecurityGroup(
             self, "DatabaseSg", vpc=self.vpc, description="Database: reached only by the API", allow_all_outbound=False,
         )
-        self.load_balancer_sg.add_egress_rule(self.api_sg, ec2.Port.tcp(API_PORT), "To the API")
-        self.api_sg.add_ingress_rule(self.load_balancer_sg, ec2.Port.tcp(API_PORT), "From the load balancer")
         self.database_sg.add_ingress_rule(self.api_sg, ec2.Port.tcp(DATABASE_PORT), "From the API")

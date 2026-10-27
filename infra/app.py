@@ -4,6 +4,7 @@
 import aws_cdk as cdk
 
 from config import load_config
+from stacks.api import ApiStack
 from stacks.database import DatabaseStack
 from stacks.network import NetworkStack
 from stacks.security import SecurityStack
@@ -17,5 +18,9 @@ cdk.Tags.of(app).add("Project", "CareFlow")
 security = SecurityStack(app, "CareFlow-Security", env=env, config=config)
 network = NetworkStack(app, "CareFlow-Network", env=env)
 database = DatabaseStack(app, "CareFlow-Database", env=env, vpc=network.vpc, database_sg=network.database_sg)
+api = ApiStack(
+    app, "CareFlow-Api", env=env, config=config, vpc=network.vpc,
+    load_balancer_sg=network.load_balancer_sg, api_sg=network.api_sg, database_secret=database.secret,
+)
 
 app.synth()
