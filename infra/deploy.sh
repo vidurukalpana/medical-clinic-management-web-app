@@ -3,5 +3,6 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-./cdk.sh bootstrap   # One-time CDK setup in the account; does nothing if already done.
+./build-frontend.sh
+./cdk.sh bootstrap   # One-time CDK setup in both regions; does nothing if already done.
 ./cdk.sh deploy --all

@@ -52,10 +52,18 @@ def rate_limit(name: str, limit: int, window_seconds: int):
         limiter: RateLimiter | None = request.app.state.rate_limiter
         if limiter is None:
             return
-        address = request.client.host if request.client else "unknown"
-        limiter.hit(f"{name}:{address}", limit, window_seconds)
+        limiter.hit(f"{name}:{client_address(request)}", limit, window_seconds)
 
     return Depends(check)
+
+
+def client_address(request: Request) -> str:
+    """The visitor's address: from the CDN's header when one is configured, else from the connection."""
+    header: str | None = request.app.state.client_address_header
+    value = request.headers.get(header) if header else None
+    if value:
+        return value.strip()
+    return request.client.host if request.client else "unknown"
 
 
 LOGIN_LIMIT = rate_limit("login", 10, 5 * 60)

@@ -365,6 +365,24 @@ def test_login_attempts_are_rate_limited_per_address(
     assert response.json()["detail"] == "Too many requests. Please wait a moment and try again."
 
 
+def test_rate_limit_uses_the_cdn_address_header() -> None:
+    from types import SimpleNamespace
+
+    from app.services.rate_limit import client_address
+
+    def request(header: str | None, headers: dict[str, str]) -> SimpleNamespace:
+        state = SimpleNamespace(client_address_header=header)
+        return SimpleNamespace(app=SimpleNamespace(state=state), headers=headers,
+                               client=SimpleNamespace(host="10.0.0.5"))
+
+    viewer = {"X-Viewer-Address": "203.0.113.7"}
+    assert client_address(request("X-Viewer-Address", viewer)) == "203.0.113.7"
+    assert client_address(request("X-Viewer-Address", {"X-Viewer-Address": "2001:db8::1"})) == "2001:db8::1"
+    # Without the setting, a header sent by the client is ignored.
+    assert client_address(request(None, viewer)) == "10.0.0.5"
+    assert client_address(request("X-Viewer-Address", {})) == "10.0.0.5"
+
+
 def test_rate_limit_window_slides(monkeypatch) -> None:
     import pytest
 

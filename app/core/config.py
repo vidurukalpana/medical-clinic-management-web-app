@@ -3,6 +3,7 @@ from typing import Literal
 
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy.engine import URL, make_url
 
 POSTGRESQL_URL_PREFIX = "postgresql+psycopg://"
 DEFAULT_DATABASE_URL = (
@@ -21,6 +22,14 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
     debug: bool = False
     database_url: str = DEFAULT_DATABASE_URL
+    # When a host is set (as on AWS, from the database secret), the URL is built from these parts instead.
+    database_host: str | None = None
+    database_port: int = 5432
+    database_name: str = "medical_clinic"
+    database_user: str = "clinic_app"
+    database_password: SecretStr | None = None
+    # Added to the URL as sslmode, e.g. "require" to refuse unencrypted database connections.
+    database_ssl_mode: Literal["disable", "prefer", "require", "verify-ca", "verify-full"] | None = None
     timezone: str = "Asia/Colombo"
     host: str = "127.0.0.1"
     port: int = 8000
@@ -29,6 +38,10 @@ class Settings(BaseSettings):
     rate_limit_enabled: bool = True
     # Behind a reverse proxy, its address; uvicorn then takes the client address from X-Forwarded-For.
     trusted_proxy_ips: str = "127.0.0.1"
+    # A header in which the CDN in front of the API puts the visitor's IP address, e.g. "X-Viewer-Address".
+    # Only set this when every request passes through that CDN and it overwrites the header,
+    # or clients could pick their own address.
+    client_address_header: str | None = None
 
     admin_username: str = "admin"
     admin_password: SecretStr | None = None
@@ -60,6 +73,24 @@ class Settings(BaseSettings):
                 "CLINIC_DATABASE_URL must use PostgreSQL with the psycopg driver."
             )
         return value
+
+    @model_validator(mode="after")
+    def build_database_url(self) -> "Settings":
+        """Assemble the URL from its parts on AWS, and add the TLS mode if one is set."""
+        if not self.database_host and not self.database_ssl_mode:
+            return self
+        if self.database_host:
+            password = self.database_password.get_secret_value() if self.database_password else None
+            url = URL.create(
+                "postgresql+psycopg", username=self.database_user, password=password,
+                host=self.database_host, port=self.database_port, database=self.database_name,
+            )
+        else:
+            url = make_url(self.database_url)
+        if self.database_ssl_mode:
+            url = url.update_query_dict({"sslmode": self.database_ssl_mode})
+        self.database_url = url.render_as_string(hide_password=False)
+        return self
 
     @model_validator(mode="after")
     def refuse_placeholder_secrets(self) -> "Settings":
