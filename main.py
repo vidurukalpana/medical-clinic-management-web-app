@@ -42,6 +42,7 @@ def create_app(
         lifespan=lifespan,
     )
     application.state.rate_limiter = RateLimiter() if app_settings.rate_limit_enabled else None
+    application.state.client_address_header = app_settings.client_address_header
     register_error_handlers(application)
     application.include_router(visits.router, prefix="/api")
     application.include_router(health.router, prefix="/api")
