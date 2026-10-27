@@ -62,8 +62,7 @@ def client_address(request: Request) -> str:
     header: str | None = request.app.state.client_address_header
     value = request.headers.get(header) if header else None
     if value:
-        # CloudFront sends "address:port"; IPv6 addresses contain colons too, so split at the last one.
-        return value.rsplit(":", 1)[0]
+        return value.strip()
     return request.client.host if request.client else "unknown"
 
 

@@ -38,8 +38,9 @@ class Settings(BaseSettings):
     rate_limit_enabled: bool = True
     # Behind a reverse proxy, its address; uvicorn then takes the client address from X-Forwarded-For.
     trusted_proxy_ips: str = "127.0.0.1"
-    # A header set by the CDN in front of the API with the visitor's address, e.g. "CloudFront-Viewer-Address".
-    # Only set this when every request passes through that CDN, or clients could pick their own address.
+    # A header in which the CDN in front of the API puts the visitor's IP address, e.g. "X-Viewer-Address".
+    # Only set this when every request passes through that CDN and it overwrites the header,
+    # or clients could pick their own address.
     client_address_header: str | None = None
 
     admin_username: str = "admin"

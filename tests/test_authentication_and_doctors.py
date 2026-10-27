@@ -375,13 +375,12 @@ def test_rate_limit_uses_the_cdn_address_header() -> None:
         return SimpleNamespace(app=SimpleNamespace(state=state), headers=headers,
                                client=SimpleNamespace(host="10.0.0.5"))
 
-    viewer = {"CloudFront-Viewer-Address": "203.0.113.7:51234"}
-    assert client_address(request("CloudFront-Viewer-Address", viewer)) == "203.0.113.7"
-    ipv6 = {"CloudFront-Viewer-Address": "2001:db8::1:443"}
-    assert client_address(request("CloudFront-Viewer-Address", ipv6)) == "2001:db8::1"
+    viewer = {"X-Viewer-Address": "203.0.113.7"}
+    assert client_address(request("X-Viewer-Address", viewer)) == "203.0.113.7"
+    assert client_address(request("X-Viewer-Address", {"X-Viewer-Address": "2001:db8::1"})) == "2001:db8::1"
     # Without the setting, a header sent by the client is ignored.
     assert client_address(request(None, viewer)) == "10.0.0.5"
-    assert client_address(request("CloudFront-Viewer-Address", {})) == "10.0.0.5"
+    assert client_address(request("X-Viewer-Address", {})) == "10.0.0.5"
 
 
 def test_rate_limit_window_slides(monkeypatch) -> None:

@@ -22,6 +22,11 @@ if [[ requirements.txt -nt .venv/.installed ]]; then
   touch .venv/.installed
 fi
 
+# The website stack needs the built React app; deploy.sh rebuilds it every time.
+if [[ ! -f ../frontend/dist/index.html ]]; then
+  ./build-frontend.sh
+fi
+
 # The CDK command-line tool, pinned in package.json.
 if [[ ! -d node_modules ]] || [[ package-lock.json -nt node_modules/.package-lock.json ]]; then
   npm ci --silent

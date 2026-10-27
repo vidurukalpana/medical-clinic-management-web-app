@@ -37,3 +37,8 @@ class NetworkStack(Stack):
             self, "DatabaseSg", vpc=self.vpc, description="Database: reached only by the API", allow_all_outbound=False,
         )
         self.database_sg.add_ingress_rule(self.api_sg, ec2.Port.tcp(DATABASE_PORT), "From the API")
+
+    @property
+    def availability_zones(self) -> list[str]:
+        # Named directly rather than looked up in the account, so the layout never shifts.
+        return [f"{self.region}a", f"{self.region}b"]

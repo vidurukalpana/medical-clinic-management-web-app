@@ -98,7 +98,7 @@ class ApiStack(Stack):
                 "CLINIC_DEBUG": "false",
                 "CLINIC_TIMEZONE": "Asia/Colombo",
                 "CLINIC_DATABASE_SSL_MODE": "require",
-                "CLINIC_CLIENT_ADDRESS_HEADER": "CloudFront-Viewer-Address",
+                "CLINIC_CLIENT_ADDRESS_HEADER": "X-Viewer-Address",
                 **{f"CLINIC_{role}_USERNAME": username for role, username in INITIAL_ACCOUNTS.items()},
             },
             secrets={

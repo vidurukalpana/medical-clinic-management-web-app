@@ -27,6 +27,8 @@ To change the diagram, edit [`architecture/architecture.drawio`](architecture/ar
 | Cost alert | AWS Budgets | Email at 80% and 100% of the budget |
 | Network | VPC, 2 AZs | No NAT Gateway (saves ~$35/month) |
 
+The website certificate and WAF rules are in us-east-1, because CloudFront requires it; everything else is in Mumbai.
+
 ## Security
 
 - **WAF:** blocks common web attacks, bad IPs and request floods.
@@ -71,7 +73,7 @@ Multi-AZ keeps a standby database for failover; it is not a backup. Data is neve
 
 Copy `.env.example` to `.env` and fill in the AWS keys, `HOSTED_ZONE_ID` and `ALERT_EMAIL`. The other values are already set.
 
-Needed on your computer: Docker, Node.js 22 or 24 (LTS), Python 3.14.
+Needed on your computer: Docker (running, to build the API image), Node.js 22 or 24 (LTS), Python 3.14.
 
 One-time manual steps:
 
@@ -99,7 +101,7 @@ The scripts install the pinned CDK tool and Python packages inside `infra/` on f
 - Build the database URL from separate settings (password comes from Secrets Manager), with TLS.
 - Add a Bedrock chat model beside Ollama (`CLINIC_CHATBOT_PROVIDER`).
 - Add an `SnsSender` beside `OutboxOnlySender` (`CLINIC_SMS_PROVIDER=sns`).
-- Read the client address from CloudFront's `CloudFront-Viewer-Address` header, so rate limits can't be bypassed.
+- Read the visitor's address from an `X-Viewer-Address` header that CloudFront sets, so rate limits can't be bypassed.
 - Build the image for ARM.
 
 Local development and `docker compose` stay the same.
