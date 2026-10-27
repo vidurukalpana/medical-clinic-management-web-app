@@ -7,6 +7,7 @@ from config import load_config
 from stacks.api import ApiStack
 from stacks.database import DatabaseStack
 from stacks.edge import EdgeStack
+from stacks.monitoring import MonitoringStack
 from stacks.network import NetworkStack
 from stacks.security import SecurityStack
 from stacks.website import WebsiteStack
@@ -32,6 +33,11 @@ website = WebsiteStack(
     certificate=edge.certificate, web_acl_arn=edge.web_acl_arn,
     load_balancer=api.load_balancer, origin_domain=api.origin_domain,
     vpc=network.vpc, load_balancer_sg=network.load_balancer_sg,
+)
+MonitoringStack(
+    app, "CareFlow-Monitoring", env=env, config=config, alerts_topic=security.alerts_topic,
+    load_balancer=api.load_balancer, target_group=api.target_group,
+    service=api.service, database=database.instance,
 )
 
 app.synth()

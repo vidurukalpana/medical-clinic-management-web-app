@@ -128,7 +128,7 @@ class ApiStack(Stack):
             circuit_breaker=ecs.DeploymentCircuitBreaker(enable=True, rollback=True),
             health_check_grace_period=Duration.seconds(60),
         )
-        listener.add_targets(
+        self.target_group = listener.add_targets(
             "Api",
             port=API_PORT,
             protocol=elbv2.ApplicationProtocol.HTTP,
