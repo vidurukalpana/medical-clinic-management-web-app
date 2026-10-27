@@ -6,9 +6,9 @@ Region: **ap-south-1 (Mumbai)**, closest to Sri Lanka. Domain: **careflowclinic.
 
 ## Architecture
 
-![CareFlow Clinic AWS architecture](architecture.png)
+![CareFlow Clinic AWS architecture](architecture/architecture.png)
 
-To change the diagram, edit [`architecture.drawio`](architecture.drawio) in draw.io, export it as `architecture.pdf`, then convert it to `architecture.png`: `qlmanage -t -s 2800 -o . architecture.pdf && mv architecture.pdf.png architecture.png`
+To change the diagram, edit [`architecture/architecture.drawio`](architecture/architecture.drawio) in draw.io, export it as `architecture.pdf`, then convert it to `architecture.png` from inside `architecture/`: `qlmanage -t -s 2800 -o . architecture.pdf && mv architecture.pdf.png architecture.png`
 
 ## Services
 
@@ -69,18 +69,9 @@ Multi-AZ keeps a standby database for failover; it is not a backup. Data is neve
 
 ## Setup
 
-`infra/.env`:
+Copy `.env.example` to `.env` and fill in the AWS keys and `ALERT_EMAIL`. The other values are already set.
 
-```bash
-AWS_ACCESS_KEY_ID=...
-AWS_SECRET_ACCESS_KEY=...
-AWS_REGION=ap-south-1
-DOMAIN_NAME=careflowclinic.net
-ALERT_EMAIL=you@example.com
-MONTHLY_BUDGET_USD=100
-```
-
-Needed on your computer: Docker, Node.js 22, Python 3.14.
+Needed on your computer: Docker, Node.js 22 or 24 (LTS), Python 3.14.
 
 One-time manual steps:
 
@@ -96,7 +87,10 @@ One-time manual steps:
 cd infra
 ./deploy.sh      # create or update everything
 ./destroy.sh     # remove everything (final DB snapshot kept)
+./cdk.sh diff    # any other CDK command, e.g. preview changes before deploying
 ```
+
+The scripts install the pinned CDK tool and Python packages inside `infra/` on first run.
 
 `deploy.sh` prints the site URL and the secret holding the initial admin and doctor passwords.
 

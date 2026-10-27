@@ -1,0 +1,8 @@
+{
+  "name": "careflow-infra",
+  "private": true,
+  "description": "Pins the AWS CDK command-line tool used by cdk.sh.",
+  "devDependencies": {
+    "aws-cdk": "2.1145.0"
+  }
+}
